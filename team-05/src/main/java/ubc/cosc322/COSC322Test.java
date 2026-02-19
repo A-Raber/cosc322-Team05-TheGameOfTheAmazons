@@ -9,7 +9,11 @@ import java.util.Scanner;
 import sfs2x.client.entities.Room;
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
+import ygraph.ai.smartfox.games.GameMessage;
 import ygraph.ai.smartfox.games.GamePlayer;
+import ygraph.ai.smartfox.games.amazons.AmazonsGameMessage;
+import ubc.cosc322.AmazonBoard;
+import ubc.cosc322.TextConverter;
 
 /**
  * An example illustrating how to implement a GamePlayer
@@ -24,6 +28,8 @@ public class COSC322Test extends GamePlayer {
 
 	private String userName = null;
 	private String passwd = null;
+	AmazonBoard board = new AmazonBoard();
+	AlphaBetaEngine engine = new AlphaBetaEngine();
 
 	/**
 	 * The main method
@@ -78,14 +84,66 @@ public class COSC322Test extends GamePlayer {
 		// see the method GamePlayer.handleGameMessage() in the game-client-api
 		// document.
 		
-		System.out.println("Received game message - Type:" + messageType + ", Details: " + msgDetails);
-    	if (messageType.equals("cosc322.game-state.board")) {
-    		gamegui.setGameState((ArrayList<Integer>) msgDetails.get("game-state"));
-    	} else if (messageType.equals("cosc322.game-action.move")) {
-    		gamegui.updateGameState((ArrayList<Integer>) msgDetails.get("queen-position-current"), (ArrayList<Integer>) msgDetails.get("queen-position-next"), (ArrayList<Integer>) msgDetails.get("arrow-position"));
-    	}
+		System.out.println("Received game message - Type:" + messageType + ", Details: " + msgDetails.get(AmazonsGameMessage.GAME_STATE));
+		
+		
+		switch(messageType) {
+		case GameMessage.GAME_STATE_BOARD:
+			handleGameState(msgDetails);
+			break;
+		case GameMessage.GAME_ACTION_START:
+			handleStart(msgDetails);
+			break;
+		case GameMessage.GAME_ACTION_MOVE:
+			handleMove(msgDetails);
+			break;
+		}
+	
+		
+//    	if (messageType.equals("cosc322.game-state.board")) {
+//    		gamegui.setGameState((ArrayList<Integer>) msgDetails.get("game-state"));
+//    	} else if (messageType.equals("cosc322.game-action.move")) {
+//    		gamegui.updateGameState((ArrayList<Integer>) msgDetails.get("queen-position-current"), (ArrayList<Integer>) msgDetails.get("queen-position-next"), (ArrayList<Integer>) msgDetails.get("arrow-position"));
+//    	}
+//    	
+   
+//    	board.loadFromServer((ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE));
+//    	
+//    	System.out.println(board.toString());
+    	
 		return true;
+		
 	}
+	
+	
+	public void handleGameState(Map<String, Object> msgDetails) {
+		if(gamegui != null) 
+			gamegui.setGameState((ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE));
+		
+		board.loadFromServer((ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE));
+		
+		
+		
+	}
+	
+	public void handleStart(Map<String, Object> msgDetails) {
+		
+		/* TODO: Need to detect which player I am
+		 * Also need to convert the best move into what the server can read return: Map<String, Object> 
+		 */
+		
+		Move best = engine.searchBestMove(board, AmazonBoard.WHITE);
+		//gameClient.sendMoveMessage(TextConverter.convertTo(best));
+		
+		System.out.println("Handle Start");
+		
+	}
+	
+	public void handleMove(Map<String, Object> msgDetails) {
+		
+		System.out.println("Handle Move");
+	}
+	
 
 	@Override
 	public String userName() {
