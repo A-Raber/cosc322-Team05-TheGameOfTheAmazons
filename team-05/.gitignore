@@ -1,0 +1,29 @@
+# Maven build output
+/target/
+
+# Java compiled classes and logs
+*.class
+*.log
+
+# Package files
+*.jar
+*.war
+*.ear
+
+# Eclipse project metadata
+.classpath
+.project
+.settings/
+
+# VS Code local workspace settings
+.vscode/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Java upgrade tool artifacts (local workflow output)
+.github/java-upgrade/
