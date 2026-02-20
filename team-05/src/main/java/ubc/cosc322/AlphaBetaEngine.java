@@ -1,5 +1,6 @@
 package ubc.cosc322;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class AlphaBetaEngine {
@@ -46,10 +47,14 @@ public class AlphaBetaEngine {
         	// call it for the next player (it's the other players turn for the following move)
         	alpha = Math.max(alpha, miniMax(board, depth -1, alpha, beta, next_player(self_colour)));
         	
+        	// undo our move
+        	board.undoMove(move);
+        	
         	if (alpha > best_score) {
         		best_score = alpha;
         		best_move = move;
         	}
+       
         }
         return best_move;
     }
@@ -108,25 +113,27 @@ public class AlphaBetaEngine {
     	    	
     }
     
+    
 	/*
-	 * heuristic function: number of moves we can make 
-	 * minus number of moves opponent can make.
+	 * heuristic function: number of queen moves we can make 
+	 * minus number of queen moves opponent can make (excludes arrow shots).
 	 * Should be a somewhat not horrible for determining
 	 * how trapped we are vs. opponent.
 	 * 
 	 * Try playing around with this function.
 	 * 
-	 * Different one for endgame??
+	 * Different one for endgame?? Like maybe how much territory is controlled
 	 */
     private int heuristic_eval(AmazonBoard board) {
     	
 
     	int opp_colour = self_colour == AmazonBoard.WHITE ? AmazonBoard.BLACK : AmazonBoard.WHITE;
     	
-    	int self_moves = MoveGenerator.generateMoves(board, self_colour).size();
-    	int opp_moves = MoveGenerator.generateMoves(board, opp_colour).size();
+    	int self_moves = MoveGenerator.generateQueenMoves(board, self_colour);
+    	int opp_moves = MoveGenerator.generateQueenMoves(board, opp_colour);
     	
-    	return self_moves - opp_moves;
+	    return self_moves - opp_moves;
+    	
     }
     
     private int next_player(int current_player) {

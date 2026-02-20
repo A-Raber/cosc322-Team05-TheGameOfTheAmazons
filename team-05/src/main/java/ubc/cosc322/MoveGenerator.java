@@ -26,7 +26,7 @@ public class MoveGenerator {
 		
 		// TODO: maybe we keep an active list of our player locations,
 		//		 so that we don't have to search for them every time.
-	    for (int r=0; r<10; r++) // find our player locations
+	    for (int r=0; r<10; r++) { // find our player locations
 	    	for (int c=0; c<10; c++) {
 	    		if (board.grid[r][c] != player)
 	    			continue;
@@ -71,9 +71,47 @@ public class MoveGenerator {
 	    		board.grid[r][c] = player; // return board to original state
 	    			
 	    	}
+	    }
 	    return moves;
 	    	
-	 }
-	 
-
+	}
+	
+	// for heuristic evaluation
+	public static int generateQueenMoves(AmazonBoard board, int player) {
+    
+	   	int moves = 0;
+		
+		int dr = 0; // row change direction
+		int dc = 0; // col change direction
+		int n = 0; // how far we move
+		int new_row = 0; // new queen row
+		int new_col = 0; // new queen col
+		
+		// TODO: maybe we keep an active list of our player locations,
+		//		 so that we don't have to search for them every time.
+	    for (int r=0; r<10; r++) { // find our player locations
+	    	for (int c=0; c<10; c++) {
+	    		if (board.grid[r][c] != player)
+	    			continue;
+	    			    		
+	    		// find all available queen moves
+	    		for (int queen_move=0; queen_move<8; queen_move++) { 
+	   				dr = row_moves[queen_move]; 
+	   				dc = col_moves[queen_move]; 
+	   				
+	   				for (n=1; n<10; n++) {
+	   					new_row = r+dr*n;
+	   					new_col = c+dc*n;
+	   						   					
+	   					if (!board.inBounds(new_row, new_col) || board.grid[new_row][new_col] != AmazonBoard.EMPTY)
+	   						break; // stop checking this move type when we run into something or leave board
+	   					
+	   					// increment number of moves
+	   					moves++;
+	   				}
+	   			}
+	   		}    			
+	    }
+	return moves;
+	}
 }
