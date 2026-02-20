@@ -30,7 +30,6 @@ public class COSC322Test extends GamePlayer {
 	private AmazonBoard board;
 	private AlphaBetaEngine engine;
 	private int self_colour = 0; // white or black?
-	private int depth = 5; // how deep to search?
 
 	/**
 	 * The main method
@@ -124,8 +123,6 @@ public class COSC322Test extends GamePlayer {
 			gamegui.setGameState((ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE));
 		
 		board.loadFromServer((ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE));
-		
-		
 		
 	}
 	

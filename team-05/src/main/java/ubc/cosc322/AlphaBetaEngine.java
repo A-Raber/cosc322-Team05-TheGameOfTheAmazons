@@ -9,7 +9,7 @@ public class AlphaBetaEngine {
 	private int NEG_INF = Integer.MIN_VALUE;
     private Timer timer = new Timer();
     
-    private int depth = 6; // try playing with this
+    private int depth = 5; // try playing with this
     private int self_colour;
     private AmazonBoard board;
 

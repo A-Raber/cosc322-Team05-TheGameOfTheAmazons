@@ -42,11 +42,11 @@ public class MoveGenerator {
     				for (n=1; n<10; n++) {
     					new_row = r+dr*n;
     					new_col = c+dc*n;
-    					
-    					board.grid[new_row][new_col] = player; // not really needed, but just for fun
-    					
+    					    					
     					if (!board.inBounds(new_row, new_col) || board.grid[new_row][new_col] != AmazonBoard.EMPTY)
     						break; // stop checking this move type when we run into something or leave board
+    					
+    					board.grid[new_row][new_col] = player; // not really needed, but just for fun
     					
     					// find available arrow shots for this queen move
     					for (int arrow_move=0; arrow_move<8; arrow_move++) { 
