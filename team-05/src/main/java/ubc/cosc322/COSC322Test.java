@@ -12,8 +12,6 @@ import ygraph.ai.smartfox.games.GameClient;
 import ygraph.ai.smartfox.games.GameMessage;
 import ygraph.ai.smartfox.games.GamePlayer;
 import ygraph.ai.smartfox.games.amazons.AmazonsGameMessage;
-import ubc.cosc322.AmazonBoard;
-import ubc.cosc322.TextConverter;
 
 /**
  * An example illustrating how to implement a GamePlayer
@@ -28,8 +26,11 @@ public class COSC322Test extends GamePlayer {
 
 	private String userName = null;
 	private String passwd = null;
-	AmazonBoard board = new AmazonBoard();
-	AlphaBetaEngine engine = new AlphaBetaEngine();
+	
+	private AmazonBoard board;
+	private AlphaBetaEngine engine;
+	private int self_colour = 0; // white or black?
+	private int depth = 5; // how deep to search?
 
 	/**
 	 * The main method
@@ -60,6 +61,8 @@ public class COSC322Test extends GamePlayer {
 	public COSC322Test(String userName, String passwd) {
 		this.userName = userName;
 		this.passwd = passwd;
+		
+		this.board = new AmazonBoard();
 
 		// To make a GUI-based player, create an instance of BaseGameGUI
 		// and implement the method getGameGUI() accordingly
@@ -129,10 +132,14 @@ public class COSC322Test extends GamePlayer {
 	public void handleStart(Map<String, Object> msgDetails) {
 		
 		/* TODO: Need to detect which player I am
+		 * this.player = AmazonBoard.WHITE or AmazonBoard.BLACK
 		 * Also need to convert the best move into what the server can read return: Map<String, Object> 
 		 */
+		this.self_colour = AmazonBoard.BLACK; // TODO: UPDATE
+		this.engine = new AlphaBetaEngine(this.board, self_colour); // board, depth, self_colour (colour unknown rn)
 		
-		Move best = engine.searchBestMove(board, AmazonBoard.WHITE);
+		Move best = engine.searchBestMove();
+		// TODO: if best == null ...
 		//gameClient.sendMoveMessage(TextConverter.convertTo(best));
 		
 		System.out.println("Handle Start");
@@ -141,6 +148,11 @@ public class COSC322Test extends GamePlayer {
 	
 	public void handleMove(Map<String, Object> msgDetails) {
 		
+		/*
+		 * TODO: Need to keep track of which player is assigned to me
+		 * Need to convert best move to what server can read (same as above)
+		 * Need to update gamegui
+		 */
 		System.out.println("Handle Move");
 	}
 	

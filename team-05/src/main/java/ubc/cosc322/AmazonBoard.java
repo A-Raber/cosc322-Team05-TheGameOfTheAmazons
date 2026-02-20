@@ -26,16 +26,16 @@ public class AmazonBoard {
 		
 	}
 	
-	public void applyMove(Move m, int player) {
+	public void applyMove(Move m) {
 		grid[m.fr][m.fc] = EMPTY;
-	    grid[m.tr][m.tc] = player;
+	    grid[m.tr][m.tc] = m.player;
 	    grid[m.ar][m.ac] = ARROW;
 	}
 
-	public void undoMove(Move m, int player) {
+	public void undoMove(Move m) {
 	    grid[m.ar][m.ac] = EMPTY;
 	    grid[m.tr][m.tc] = EMPTY;
-	    grid[m.fr][m.fc] = player;
+	    grid[m.fr][m.fc] = m.player;
 	}
 	
 	public boolean inBounds(int r, int c) {

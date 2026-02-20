@@ -3,70 +3,130 @@ package ubc.cosc322;
 import java.util.List;
 
 public class AlphaBetaEngine {
-
+	
+	private int INF = Integer.MAX_VALUE;
+	private int NEG_INF = Integer.MIN_VALUE;
     private Timer timer = new Timer();
+    
+    private int depth = 6; // try playing with this
+    private int self_colour;
+    private AmazonBoard board;
 
-    public Move searchBestMove(AmazonBoard board, int player) {
+    /*
+     * @param board
+     * @param self_colour: either AmazonBoard.WHITE (1) or AmazonBoard.BLACK (2)
+     */
+    public AlphaBetaEngine(AmazonBoard board, int self_colour) {
+    	this.board = board;
+    	this.self_colour = self_colour;
+    }
+    
+    
+    public Move searchBestMove() {
         timer.start();
-        Move best = null;
-
-        for (int depth = 1; depth <= 10; depth++) {
-            if (timer.timeUp()) break;
-            best = alphaBetaRoot(board, depth, player);
+        
+        Move best_move = null;
+        int best_score = NEG_INF;
+        
+        int alpha = NEG_INF;
+        int beta = INF;
+        
+        /*
+         * consider iterative deepening, i.e. search depth 1, then 2, etc.
+         * and break if timer runs out
+         * 
+         * TODO: handle no possible moves?
+         */
+        
+        for (Move move : MoveGenerator.generateMoves(board, self_colour)) {
+        	if (timer.timeUp()) break;
+        	board.applyMove(move);
+        	
+        	// call with depth-1 because we've basically done a move now, so depth is one less
+        	// call it for the next player (it's the other players turn for the following move)
+        	alpha = Math.max(alpha, miniMax(board, depth -1, alpha, beta, next_player(self_colour)));
+        	
+        	if (alpha > best_score) {
+        		best_score = alpha;
+        		best_move = move;
+        	}
         }
-        return best;
+        return best_move;
     }
-
-    private Move alphaBetaRoot(AmazonBoard b, int depth, int player) {
-        List<Move> moves = MoveGenerator.generateMoves(b, player);
-        Move bestMove = null;
-        int bestScore = Integer.MIN_VALUE;
-
-        for (Move m : moves) {
-            b.applyMove(m, player);
-            int score = alphaBeta(b, depth-1, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
-            b.undoMove(m, player);
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestMove = m;
-            }
-        }
-        return bestMove;
+    
+    private int miniMax(AmazonBoard board, int depth, int alpha, int beta, int player) {
+    	// if we are at the end of our depth, return evaluation of current state
+    	if (depth <= 0)
+    		return heuristic_eval(board);
+    	
+    	// if it's our turn (max)
+    	if (player == self_colour) {
+    		int currentAlpha = NEG_INF;
+    		
+    		// check children
+    		for (Move move : MoveGenerator.generateMoves(board, player)) {
+    			if (timer.timeUp()) break;
+    			board.applyMove(move);
+    			
+    			// set current alpha
+    			currentAlpha = Math.max(currentAlpha, miniMax(board, depth-1, alpha, beta, next_player(player)));
+    			alpha = Math.max(alpha, currentAlpha);
+            
+    			// undo our move
+    			board.undoMove(move);
+            
+    			// stop searching this branch (prune) if alpha >= beta
+    			if (alpha >= beta)
+    				return alpha;
+    		}
+			return currentAlpha;
+    	}
+    	
+    	// if it's opponents turn (min)
+    	int currentBeta = INF;
+    	for (Move move : MoveGenerator.generateMoves(board, player)) {
+    		if (timer.timeUp()) break;
+			board.applyMove(move);
+			
+			// set current beta
+			currentBeta = Math.min(currentBeta, miniMax(board, depth-1, alpha, beta, next_player(player)));
+			beta = Math.min(beta, currentBeta);
+			
+			// undo our move
+			board.undoMove(move);
+			
+			// stop searching this branch (prune) if beta <= alpha
+			if (beta <= alpha)
+				return beta;
+    	}
+    	return currentBeta;
+    	
+    	
+    	/*
+    	 * TODO: handle no possible moves?
+    	 */
+    	    	
     }
-
-    private int alphaBeta(AmazonBoard b, int depth, int alpha, int beta, boolean maximizing) {
-        if (depth == 0 || timer.timeUp()) {
-            return Evaluator.evaluate(b);
-        }
-
-        int player = maximizing ? AmazonBoard.WHITE : AmazonBoard.BLACK;
-        List<Move> moves = MoveGenerator.generateMoves(b, player);
-
-        if (moves.isEmpty()) {
-            return maximizing ? Integer.MIN_VALUE : Integer.MAX_VALUE;
-        }
-
-        if (maximizing) {
-            int value = Integer.MIN_VALUE;
-            for (Move m : moves) {
-                b.applyMove(m, player);
-                value = Math.max(value, alphaBeta(b, depth-1, alpha, beta, false));
-                b.undoMove(m, player);
-                alpha = Math.max(alpha, value);
-                if (alpha >= beta) break;
-            }
-            return value;
-        } else {
-            int value = Integer.MAX_VALUE;
-            for (Move m : moves) {
-                b.applyMove(m, player);
-                value = Math.min(value, alphaBeta(b, depth-1, alpha, beta, true));
-                b.undoMove(m, player);
-                beta = Math.min(beta, value);
-                if (beta <= alpha) break;
-            }
-            return value;
-        }
+    
+    /*
+     * TODO: try score = myMoves - oponentMoves (max mobility)
+     * or there's some other more complicated ones online that I've seen
+     * Make sure we try to maximize the search for our player
+     * 
+     * Try a different function for endgame??
+     * 
+     */
+    private int heuristic_eval(AmazonBoard board) {
+    	
+    	/*
+    	 * TODO (use self_colour in this method)
+    	 */
+    	
+    	return 0;
     }
+    
+    private int next_player(int current_player) {
+    	return current_player == AmazonBoard.WHITE ? AmazonBoard.BLACK : AmazonBoard.WHITE;
+    }
+    
 }
