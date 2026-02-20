@@ -1,13 +1,20 @@
+# Maven build output
+target/
+*.jar
+*.war
+*.ear
 target/
 
 # Eclipse IDE
 .classpath
 .project
 .settings/
+bin/
 
 # IntelliJ IDEA
 .idea/
 *.iml
+out/
 
 # VS Code
 .vscode/
@@ -15,3 +22,6 @@ target/
 # OS cruft
 .DS_Store
 Thumbs.db
+
+# Java upgrade tool artifacts (local workflow output)
+.github/java-upgrade/

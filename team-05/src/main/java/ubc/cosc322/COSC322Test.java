@@ -2,15 +2,14 @@
 package ubc.cosc322;
 
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Map;
-import java.util.Scanner;
 
-import sfs2x.client.entities.Room;
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
 import ygraph.ai.smartfox.games.GameMessage;
 import ygraph.ai.smartfox.games.GamePlayer;
+import ygraph.ai.smartfox.games.amazons.AmazonsGameMessage;
 
 /**
  * An example illustrating how to implement a GamePlayer
@@ -25,6 +24,8 @@ public class COSC322Test extends GamePlayer {
 
 	private String userName = null;
 	private String passwd = null;
+	private final GameState currentGameState = new GameState();
+	private int myColor = GameState.BLACK;
 
 	/**
 	 * The main method
@@ -43,7 +44,7 @@ public class COSC322Test extends GamePlayer {
 					player.Go();
 				}
 			});
-		}
+		} 
 	}
 
 	/**
@@ -70,6 +71,7 @@ public class COSC322Test extends GamePlayer {
 	}
 
 	@Override
+	@SuppressWarnings("unchecked")
 	public boolean handleGameMessage(String messageType, Map<String, Object> msgDetails) {
 		// This method will be called by the GameClient when it receives a game-related
 		// message
@@ -79,13 +81,68 @@ public class COSC322Test extends GamePlayer {
 		// see the method GamePlayer.handleGameMessage() in the game-client-api
 		// document.
 		
-		System.out.println("Received game message - Type:" + messageType + ", Details: " + msgDetails);
-    	if (messageType.equals(GameMessage.GAME_STATE_BOARD)) {
-    		gamegui.setGameState((ArrayList<Integer>) msgDetails.get("game-state"));
-    	} else if (messageType.equals(GameMessage.GAME_ACTION_MOVE)) {
-    		gamegui.updateGameState((ArrayList<Integer>) msgDetails.get("queen-position-current"), (ArrayList<Integer>) msgDetails.get("queen-position-next"), (ArrayList<Integer>) msgDetails.get("arrow-position"));
-    	}
+		System.out.println("handleGameMessage -> type: " + messageType + ", details: " + msgDetails);
+		if (GameMessage.GAME_STATE_BOARD.equals(messageType)) {
+			ArrayList<Integer> serverBoard = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE);
+			
+			currentGameState.loadFromServerBoard(serverBoard);
+			currentGameState.setSideToMove(GameState.BLACK);
+			gamegui.setGameState(serverBoard);
+
+		} else if (GameMessage.GAME_ACTION_START.equals(messageType)) {
+			updatePlayerAssignments(msgDetails);
+
+			// --- TEST MOVE
+			// if (myColor == GameState.BLACK) {
+			// 	// Black queen at (10,4) → (9,4), arrow to (8,4)
+			// 	ArrayList<Integer> qFrom = new ArrayList<>(Arrays.asList(10, 4));
+			// 	ArrayList<Integer> qTo   = new ArrayList<>(Arrays.asList(9, 4));
+			// 	ArrayList<Integer> arrow = new ArrayList<>(Arrays.asList(8, 4));
+			// 	System.out.println("TEST MOVE: queen " + qFrom + " -> " + qTo + ", arrow -> " + arrow);
+			// 	currentGameState.applyMove(qFrom, qTo, arrow);
+			// 	gamegui.updateGameState(qFrom, qTo, arrow);
+			// 	gameClient.sendMoveMessage(qFrom, qTo, arrow);
+			// }
+			// --- END TEST MOVE ---
+
+		} else if (GameMessage.GAME_ACTION_MOVE.equals(messageType)) {
+			ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
+			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_NEXT);
+			ArrayList<Integer> arrowPosition = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.ARROW_POS);
+			
+			currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
+			gamegui.updateGameState(queenCurrent, queenNext, arrowPosition);
+		}
 		return true;
+	}
+
+	private void updatePlayerAssignments(Map<String, Object> msgDetails) {
+		String blackPlayer = (String) msgDetails.get(AmazonsGameMessage.PLAYER_BLACK);
+		String whitePlayer = (String) msgDetails.get(AmazonsGameMessage.PLAYER_WHITE);
+
+		if (blackPlayer != null) {
+			currentGameState.setBlackPlayer(blackPlayer);
+		}
+		if (whitePlayer != null) {
+			currentGameState.setWhitePlayer(whitePlayer);
+		}
+
+		String storedBlack = currentGameState.getBlackPlayer();
+		String storedWhite = currentGameState.getWhitePlayer();
+
+		if (userName.equals(storedBlack)) {
+			myColor = GameState.BLACK;
+		} else if (userName.equals(storedWhite)) {
+			myColor = GameState.WHITE;
+		}
+	}
+
+	public GameState getCurrentGameState() {
+		return currentGameState;
+	}
+
+	public int getMyColor() {
+		return myColor;
 	}
 
 	@Override
