@@ -3,7 +3,6 @@ target/
 *.jar
 *.war
 *.ear
-target/
 
 # Eclipse IDE
 .classpath
@@ -22,6 +21,3 @@ out/
 # OS cruft
 .DS_Store
 Thumbs.db
-
-# Java upgrade tool artifacts (local workflow output)
-.github/java-upgrade/
