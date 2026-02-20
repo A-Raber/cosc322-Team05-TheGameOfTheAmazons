@@ -92,7 +92,7 @@ public class COSC322Test extends GamePlayer {
 		} else if (GameMessage.GAME_ACTION_START.equals(messageType)) {
 			updatePlayerAssignments(msgDetails);
 
-			// --- TEST MOVE:
+			// --- TEST MOVE
 			// if (myColor == GameState.BLACK) {
 			// 	// Black queen at (10,4) → (9,4), arrow to (8,4)
 			// 	ArrayList<Integer> qFrom = new ArrayList<>(Arrays.asList(10, 4));

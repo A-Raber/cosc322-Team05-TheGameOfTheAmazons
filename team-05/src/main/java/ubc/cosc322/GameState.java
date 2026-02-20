@@ -3,7 +3,7 @@ package ubc.cosc322;
 import java.util.List;
 
 public class GameState {
-
+    
 	public static final int BOARD_SIZE = 10;
 	public static final int BOARD_CELLS = BOARD_SIZE * BOARD_SIZE;
 	public static final int EMPTY = 0;
