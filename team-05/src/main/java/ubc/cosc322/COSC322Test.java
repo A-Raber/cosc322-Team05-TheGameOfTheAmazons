@@ -94,9 +94,10 @@ public class COSC322Test extends GamePlayer {
 
 			// --- TEST MOVE:
 			// if (myColor == GameState.BLACK) {
-			// 	ArrayList<Integer> qFrom = new ArrayList<>(Arrays.asList(1, 4));
-			// 	ArrayList<Integer> qTo   = new ArrayList<>(Arrays.asList(3, 4));
-			// 	ArrayList<Integer> arrow = new ArrayList<>(Arrays.asList(5, 4));
+			// 	// Black queen at (10,4) → (9,4), arrow to (8,4)
+			// 	ArrayList<Integer> qFrom = new ArrayList<>(Arrays.asList(10, 4));
+			// 	ArrayList<Integer> qTo   = new ArrayList<>(Arrays.asList(9, 4));
+			// 	ArrayList<Integer> arrow = new ArrayList<>(Arrays.asList(8, 4));
 			// 	System.out.println("TEST MOVE: queen " + qFrom + " -> " + qTo + ", arrow -> " + arrow);
 			// 	currentGameState.applyMove(qFrom, qTo, arrow);
 			// 	gamegui.updateGameState(qFrom, qTo, arrow);
