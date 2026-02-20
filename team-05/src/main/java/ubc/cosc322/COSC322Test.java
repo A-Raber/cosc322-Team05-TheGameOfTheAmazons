@@ -2,7 +2,9 @@
 package ubc.cosc322;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Map;
+
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
 import ygraph.ai.smartfox.games.GameMessage;
@@ -42,7 +44,7 @@ public class COSC322Test extends GamePlayer {
 					player.Go();
 				}
 			});
-		}
+		} 
 	}
 
 	/**
@@ -85,9 +87,22 @@ public class COSC322Test extends GamePlayer {
 			
 			currentGameState.loadFromServerBoard(serverBoard);
 			currentGameState.setSideToMove(GameState.BLACK);
-			
-			updatePlayerAssignments(msgDetails);
 			gamegui.setGameState(serverBoard);
+
+		} else if (GameMessage.GAME_ACTION_START.equals(messageType)) {
+			updatePlayerAssignments(msgDetails);
+
+			// --- TEST MOVE:
+			// if (myColor == GameState.BLACK) {
+			// 	ArrayList<Integer> qFrom = new ArrayList<>(Arrays.asList(1, 4));
+			// 	ArrayList<Integer> qTo   = new ArrayList<>(Arrays.asList(3, 4));
+			// 	ArrayList<Integer> arrow = new ArrayList<>(Arrays.asList(5, 4));
+			// 	System.out.println("TEST MOVE: queen " + qFrom + " -> " + qTo + ", arrow -> " + arrow);
+			// 	currentGameState.applyMove(qFrom, qTo, arrow);
+			// 	gamegui.updateGameState(qFrom, qTo, arrow);
+			// 	gameClient.sendMoveMessage(qFrom, qTo, arrow);
+			// }
+			// --- END TEST MOVE ---
 
 		} else if (GameMessage.GAME_ACTION_MOVE.equals(messageType)) {
 			ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
