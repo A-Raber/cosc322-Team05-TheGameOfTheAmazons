@@ -108,21 +108,25 @@ public class AlphaBetaEngine {
     	    	
     }
     
-    /*
-     * TODO: try score = myMoves - oponentMoves (max mobility)
-     * or there's some other more complicated ones online that I've seen
-     * Make sure we try to maximize the search for our player
-     * 
-     * Try a different function for endgame??
-     * 
-     */
+	/*
+	 * heuristic function: number of moves we can make 
+	 * minus number of moves opponent can make.
+	 * Should be a somewhat not horrible for determining
+	 * how trapped we are vs. opponent.
+	 * 
+	 * Try playing around with this function.
+	 * 
+	 * Different one for endgame??
+	 */
     private int heuristic_eval(AmazonBoard board) {
     	
-    	/*
-    	 * TODO (use self_colour in this method)
-    	 */
+
+    	int opp_colour = self_colour == AmazonBoard.WHITE ? AmazonBoard.BLACK : AmazonBoard.WHITE;
     	
-    	return 0;
+    	int self_moves = MoveGenerator.generateMoves(board, self_colour).size();
+    	int opp_moves = MoveGenerator.generateMoves(board, opp_colour).size();
+    	
+    	return self_moves - opp_moves;
     }
     
     private int next_player(int current_player) {
