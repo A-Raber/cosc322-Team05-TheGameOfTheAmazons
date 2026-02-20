@@ -9,6 +9,7 @@ import java.util.Scanner;
 import sfs2x.client.entities.Room;
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
+import ygraph.ai.smartfox.games.GameMessage;
 import ygraph.ai.smartfox.games.GamePlayer;
 
 /**
@@ -79,9 +80,9 @@ public class COSC322Test extends GamePlayer {
 		// document.
 		
 		System.out.println("Received game message - Type:" + messageType + ", Details: " + msgDetails);
-    	if (messageType.equals("cosc322.game-state.board")) {
+    	if (messageType.equals(GameMessage.GAME_STATE_BOARD)) {
     		gamegui.setGameState((ArrayList<Integer>) msgDetails.get("game-state"));
-    	} else if (messageType.equals("cosc322.game-action.move")) {
+    	} else if (messageType.equals(GameMessage.GAME_ACTION_MOVE)) {
     		gamegui.updateGameState((ArrayList<Integer>) msgDetails.get("queen-position-current"), (ArrayList<Integer>) msgDetails.get("queen-position-next"), (ArrayList<Integer>) msgDetails.get("arrow-position"));
     	}
 		return true;
