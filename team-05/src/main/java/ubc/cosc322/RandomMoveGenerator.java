@@ -51,6 +51,23 @@ public class RandomMoveGenerator implements MoveGenerator {
 		return null;
 	}
 
+	public boolean hasAnyLegalMove(GameState gameState, int side) {
+		int[] board = gameState.copyBoard();
+		ArrayList<Integer> queens = collectQueenPositions(board, side);
+
+		for (int queenPos : queens) {
+			ArrayList<Integer> destinations = getReachableSquares(board, queenPos);
+			for (int destination : destinations) {
+				ArrayList<Integer> arrowTargets = getArrowTargetsAfterMove(board, queenPos, destination, side);
+				if (!arrowTargets.isEmpty()) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
 	private ArrayList<Integer> collectQueenPositions(int[] board, int side) {
 		ArrayList<Integer> queens = new ArrayList<>();
 		for (int i = 0; i < GameState.BOARD_CELLS; i++) {
