@@ -2,8 +2,8 @@
 package ubc.cosc322;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Map;
+import java.util.Random;
 
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
@@ -25,6 +25,8 @@ public class COSC322Test extends GamePlayer {
 	private String userName = null;
 	private String passwd = null;
 	private final GameState currentGameState = new GameState();
+	private final Random random = new Random();
+	private final MoveGenerator moveGenerator = new RandomMoveGenerator();
 	private int myColor = GameState.BLACK;
 
 	/**
@@ -91,19 +93,9 @@ public class COSC322Test extends GamePlayer {
 
 		} else if (GameMessage.GAME_ACTION_START.equals(messageType)) {
 			updatePlayerAssignments(msgDetails);
-
-			// --- TEST MOVE
-			// if (myColor == GameState.BLACK) {
-			// 	// Black queen at (10,4) → (9,4), arrow to (8,4)
-			// 	ArrayList<Integer> qFrom = new ArrayList<>(Arrays.asList(10, 4));
-			// 	ArrayList<Integer> qTo   = new ArrayList<>(Arrays.asList(9, 4));
-			// 	ArrayList<Integer> arrow = new ArrayList<>(Arrays.asList(8, 4));
-			// 	System.out.println("TEST MOVE: queen " + qFrom + " -> " + qTo + ", arrow -> " + arrow);
-			// 	currentGameState.applyMove(qFrom, qTo, arrow);
-			// 	gamegui.updateGameState(qFrom, qTo, arrow);
-			// 	gameClient.sendMoveMessage(qFrom, qTo, arrow);
-			// }
-			// --- END TEST MOVE ---
+			if (myColor == GameState.BLACK) {
+				makeAndSendMove();
+			}
 
 		} else if (GameMessage.GAME_ACTION_MOVE.equals(messageType)) {
 			ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
@@ -112,8 +104,27 @@ public class COSC322Test extends GamePlayer {
 			
 			currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
 			gamegui.updateGameState(queenCurrent, queenNext, arrowPosition);
+
+			if (currentGameState.getSideToMove() == myColor) {
+				makeAndSendMove();
+			}
 		}
 		return true;
+	}
+
+	@SuppressWarnings("unchecked")
+	private void makeAndSendMove() {
+		ArrayList<Integer>[] move = moveGenerator.generateMove(currentGameState, random);
+		if (move == null) {
+			int winningColor = (currentGameState.getSideToMove() == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
+			System.out.println("Winner color: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE"));
+			return;
+		}
+
+		System.out.println("Random move: queen " + move[0] + " -> " + move[1] + ", arrow -> " + move[2]);
+		currentGameState.applyMove(move[0], move[1], move[2]);
+		gamegui.updateGameState(move[0], move[1], move[2]);
+		gameClient.sendMoveMessage(move[0], move[1], move[2]);
 	}
 
 	private void updatePlayerAssignments(Map<String, Object> msgDetails) {

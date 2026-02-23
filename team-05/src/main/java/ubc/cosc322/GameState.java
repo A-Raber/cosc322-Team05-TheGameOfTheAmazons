@@ -59,18 +59,7 @@ public class GameState {
 		this.sideToMove = sideToMove;
 	}
 
-	public int[][] copyBoard() {
-		int[][] copy = new int[BOARD_SIZE][BOARD_SIZE];
-		for (int row = 0; row < BOARD_SIZE; row++) {
-			int base = row * BOARD_SIZE;
-			for (int col = 0; col < BOARD_SIZE; col++) {
-				copy[row][col] = board[base + col];
-			}
-		}
-		return copy;
-	}
-
-	public int[] copyBoard1D() {
+	public int[] copyBoard() {
 		return board.clone();
 	}
 
