@@ -1,0 +1,122 @@
+package ubc.cosc322;
+
+import java.util.List;
+
+public class GameState {
+    
+	public static final int BOARD_SIZE = 10;
+	public static final int BOARD_CELLS = BOARD_SIZE * BOARD_SIZE;
+	public static final int EMPTY = 0;
+	public static final int BLACK = 1;
+	public static final int WHITE = 2;
+	public static final int ARROW = 3;
+
+	private final int[] board;
+	private int sideToMove;
+	private String blackPlayer;
+	private String whitePlayer;
+
+	public GameState() {
+		this.board = new int[BOARD_CELLS];
+		this.sideToMove = BLACK;
+	}
+
+	public void loadFromServerBoard(List<Integer> serverBoard) {
+		int writeIndex = 0;
+		for (int row = 1; row <= BOARD_SIZE; row++) {
+			int base = row * 11;
+			for (int col = 1; col <= BOARD_SIZE; col++) {
+				board[writeIndex++] = serverBoard.get(base + col);
+			}
+		}
+
+	}
+
+	public void applyMove(List<Integer> queenPositionCurrent, List<Integer> queenPositionNext, List<Integer> arrowPosition) {
+		int from = XYtoBoardPosition(queenPositionCurrent);
+		int to = XYtoBoardPosition(queenPositionNext);
+		int arrow = XYtoBoardPosition(arrowPosition);
+
+		int movingPiece = board[from];
+		board[from] = EMPTY;
+		board[to] = movingPiece;
+		board[arrow] = ARROW;
+		toggleSideToMove();
+	}
+
+	public void undoMove(int from, int to, int arrow, int movingPiece) {
+		board[arrow] = EMPTY;
+		board[to] = EMPTY;
+		board[from] = movingPiece;
+		toggleSideToMove();
+	}
+	
+	public int applyMove(Move m) {
+	    int movingPiece = board[m.from];  // store for undo
+	    board[m.from] = EMPTY;
+	    board[m.to] = movingPiece;
+	    board[m.arrow] = ARROW;
+	    toggleSideToMove();
+	    return movingPiece; // return piece so undo knows what to restore
+	}
+
+	public void undoMove(Move m, int movingPiece) {
+	    board[m.arrow] = EMPTY;
+	    board[m.to] = EMPTY;
+	    board[m.from] = movingPiece;
+	    toggleSideToMove();
+	}
+
+	public int getSideToMove() {
+		return sideToMove;
+	}
+
+	public void setSideToMove(int sideToMove) {
+		this.sideToMove = sideToMove;
+	}
+
+	public int[][] copyBoard() {
+		int[][] copy = new int[BOARD_SIZE][BOARD_SIZE];
+		for (int row = 0; row < BOARD_SIZE; row++) {
+			int base = row * BOARD_SIZE;
+			for (int col = 0; col < BOARD_SIZE; col++) {
+				copy[row][col] = board[base + col];
+			}
+		}
+		return copy;
+	}
+
+	public int[] copyBoard1D() {
+		return board.clone();
+	}
+
+	public int getCell(int row, int col) {
+		return board[row * BOARD_SIZE + col];
+	}
+
+	public void setBlackPlayer(String blackPlayer) {
+		this.blackPlayer = blackPlayer;
+	}
+
+	public void setWhitePlayer(String whitePlayer) {
+		this.whitePlayer = whitePlayer;
+	}
+
+	public String getBlackPlayer() {
+		return blackPlayer;
+	}
+
+	public String getWhitePlayer() {
+		return whitePlayer;
+	}
+
+	public void toggleSideToMove() {
+		sideToMove = (sideToMove == BLACK) ? WHITE : BLACK;
+	}
+
+	private int XYtoBoardPosition(List<Integer> position) {
+		int row = position.get(0) - 1;
+		int col = position.get(1) - 1;
+		return row * BOARD_SIZE + col;
+	}
+}

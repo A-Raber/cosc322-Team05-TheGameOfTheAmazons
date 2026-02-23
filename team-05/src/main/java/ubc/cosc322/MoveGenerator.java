@@ -6,45 +6,84 @@ import java.util.List;
 
 public class MoveGenerator {
 	
-    private static final int[] dr = {-1,-1,-1,0,0,1,1,1};
-    private static final int[] dc = {-1,0,1,-1,1,-1,0,1};
-    
-    public static List<Move> generateMoves(AmazonBoard b, int player){
-    	List<Move> moves = new ArrayList<>();
-    	
-    	for (int r=0;r<10;r++) {
-            for (int c=0;c<10;c++) {
-                if (b.grid[r][c] != player) continue;
-
-                for (int d=0; d<8; d++) {
-                    int nr=r+dr[d], nc=c+dc[d];
-                    while (b.inBounds(nr,nc) && b.grid[nr][nc]==AmazonBoard.EMPTY) {
-
-                        // move queen temporarily
-                        b.grid[r][c] = AmazonBoard.EMPTY;
-                        b.grid[nr][nc] = player;
-
-                        generateArrows(b, r, c, nr, nc, moves);
-
-                        // undo temp move
-                        b.grid[r][c] = player;
-                        b.grid[nr][nc] = AmazonBoard.EMPTY;
-
-                        nr+=dr[d]; nc+=dc[d];
-                    }
-                }
-            }
-        }
-    	
-    	return moves;
-    }
-    private static void generateArrows(AmazonBoard b, int fr,int fc,int tr,int tc,List<Move> moves){
-        for(int d=0; d<8; d++){
-            int ar=tr+dr[d], ac=tc+dc[d];
-            while(b.inBounds(ar,ac) && b.grid[ar][ac]==AmazonBoard.EMPTY){
-                moves.add(new Move(fr,fc,tr,tc,ar,ac));
-                ar+=dr[d]; ac+=dc[d];
-            }
-        }
-    }
+	// 8 directions: N, NE, E, SE, S, SW, W, NW
+	/*
+	 * Idea: have it so that it first calculates in the direction of the opposite team
+	 * Plus have it calculate West to North-East-South so it calculates the front of the player first
+	 */
+	private static final int[] DX = {-1, -1, 0, 1, 1, 1, 0, -1};
+	private static final int[] DY = {0, 1, 1, 1, 0, -1, -1, -1};
+	
+	public static List<Move> generateMoves(GameState state){
+		List<Move> moves = new ArrayList<>();
+		int side = state.getSideToMove();
+		int[] board = state.copyBoard1D();
+		
+		for(int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
+			if(board[idx] == side) {
+				moves.addAll(generateQueenMoves(state, idx));
+			}
+		}
+		return moves;
+	}
+	
+	private static List<Move> generateQueenMoves(GameState state, int fromIndex){
+		List<Move> moves = new ArrayList<>();
+		int boardSize = GameState.BOARD_SIZE;
+		int[] board = state.copyBoard1D();
+		
+		int row = fromIndex / boardSize;
+		int col = fromIndex % boardSize;
+		
+		for(int dir = 0; dir < 8; dir++) {
+			int r = row + DX[dir];
+			int c = col + DY[dir];
+			
+			while(isInBounds(r, c) && board[r * boardSize + c] == GameState.EMPTY) {
+				int toIndex = r * boardSize + c;
+				
+				// Temp move queen to position 
+				board[fromIndex] = GameState.EMPTY;
+				board[toIndex] = state.getSideToMove();
+				
+				// Generate all arrows shots from new position
+				moves.addAll(generateArrowShots(board, toIndex, fromIndex));
+				
+				// Undo temp move for queen
+				board[fromIndex] = state.getSideToMove();
+				board[toIndex] = GameState.EMPTY;
+				
+				
+				// Moves in current direction until it is blocked by wall/arrow/player
+				r += DX[dir];
+				c += DY[dir];
+			}
+		}
+		return moves;
+	}
+	
+	private static List<Move> generateArrowShots(int[] board, int toIndex, int fromIndex){
+		List<Move> moves = new ArrayList<>();
+		int boardSize = GameState.BOARD_SIZE;
+		int row = toIndex / boardSize;
+		int col = fromIndex % boardSize;
+		
+		for(int dir = 0; dir < 8; dir++) {
+			int r = row + DX[dir];
+			int c = col + DY[dir];
+			
+			while(isInBounds(r, c) && board[r * boardSize + c] == GameState.EMPTY) {
+				int arrowIndex = r * boardSize + c;
+				moves.add(new Move(fromIndex, toIndex, arrowIndex));
+				r += DX[dir];
+				c += DY[dir];
+			}
+		}
+		return moves;
+	}
+	
+	
+	private static boolean isInBounds(int row, int col) {
+		return row >= 0 && row < GameState.BOARD_SIZE && col >= 0 && col < GameState.BOARD_SIZE;
+	}
 }

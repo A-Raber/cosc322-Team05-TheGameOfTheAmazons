@@ -2,18 +2,14 @@
 package ubc.cosc322;
 
 import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 import java.util.Map;
-import java.util.Scanner;
 
-import sfs2x.client.entities.Room;
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
 import ygraph.ai.smartfox.games.GameMessage;
 import ygraph.ai.smartfox.games.GamePlayer;
 import ygraph.ai.smartfox.games.amazons.AmazonsGameMessage;
-import ubc.cosc322.AmazonBoard;
-import ubc.cosc322.TextConverter;
 
 /**
  * An example illustrating how to implement a GamePlayer
@@ -28,8 +24,8 @@ public class COSC322Test extends GamePlayer {
 
 	private String userName = null;
 	private String passwd = null;
-	AmazonBoard board = new AmazonBoard();
-	AlphaBetaEngine engine = new AlphaBetaEngine();
+	private final GameState currentGameState = new GameState();
+	private int myColor = GameState.BLACK;
 
 	/**
 	 * The main method
@@ -48,7 +44,7 @@ public class COSC322Test extends GamePlayer {
 					player.Go();
 				}
 			});
-		}
+		} 
 	}
 
 	/**
@@ -75,6 +71,7 @@ public class COSC322Test extends GamePlayer {
 	}
 
 	@Override
+	@SuppressWarnings("unchecked")
 	public boolean handleGameMessage(String messageType, Map<String, Object> msgDetails) {
 		// This method will be called by the GameClient when it receives a game-related
 		// message
@@ -84,66 +81,103 @@ public class COSC322Test extends GamePlayer {
 		// see the method GamePlayer.handleGameMessage() in the game-client-api
 		// document.
 		
-		System.out.println("Received game message - Type:" + messageType + ", Details: " + msgDetails.get(AmazonsGameMessage.GAME_STATE));
-		
-		
-		switch(messageType) {
-		case GameMessage.GAME_STATE_BOARD:
-			handleGameState(msgDetails);
-			break;
-		case GameMessage.GAME_ACTION_START:
-			handleStart(msgDetails);
-			break;
-		case GameMessage.GAME_ACTION_MOVE:
-			handleMove(msgDetails);
-			break;
+		System.out.println("handleGameMessage -> type: " + messageType + ", details: " + msgDetails);
+		if (GameMessage.GAME_STATE_BOARD.equals(messageType)) {
+			ArrayList<Integer> serverBoard = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE);
+			
+			currentGameState.loadFromServerBoard(serverBoard);
+			currentGameState.setSideToMove(GameState.BLACK);
+			gamegui.setGameState(serverBoard);
+
+		} else if (GameMessage.GAME_ACTION_START.equals(messageType)) {
+			updatePlayerAssignments(msgDetails);
+
+			// --- TEST MOVE
+			// if (myColor == GameState.BLACK) {
+			// 	// Black queen at (10,4) → (9,4), arrow to (8,4)
+			// 	ArrayList<Integer> qFrom = new ArrayList<>(Arrays.asList(10, 4));
+			// 	ArrayList<Integer> qTo   = new ArrayList<>(Arrays.asList(9, 4));
+			// 	ArrayList<Integer> arrow = new ArrayList<>(Arrays.asList(8, 4));
+			// 	System.out.println("TEST MOVE: queen " + qFrom + " -> " + qTo + ", arrow -> " + arrow);
+			// 	currentGameState.applyMove(qFrom, qTo, arrow);
+			// 	gamegui.updateGameState(qFrom, qTo, arrow);
+			// 	gameClient.sendMoveMessage(qFrom, qTo, arrow);
+			// }
+			// --- END TEST MOVE ---
+			System.out.println("Starting the Game!!");
+
+		} else if (GameMessage.GAME_ACTION_MOVE.equals(messageType)) {
+		    ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
+		    ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_NEXT);
+		    ArrayList<Integer> arrowPosition = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.ARROW_POS);
+
+		    // Apply opponent move
+		    currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
+		    gamegui.updateGameState(queenCurrent, queenNext, arrowPosition);
+
+		    // If it's now OUR turn → search
+		    System.out.println("Make your Turn!!!");
+		    if (currentGameState.getSideToMove() == myColor) {
+		        makeAIMove();
+		    }
 		}
-	
-		
-//    	if (messageType.equals("cosc322.game-state.board")) {
-//    		gamegui.setGameState((ArrayList<Integer>) msgDetails.get("game-state"));
-//    	} else if (messageType.equals("cosc322.game-action.move")) {
-//    		gamegui.updateGameState((ArrayList<Integer>) msgDetails.get("queen-position-current"), (ArrayList<Integer>) msgDetails.get("queen-position-next"), (ArrayList<Integer>) msgDetails.get("arrow-position"));
-//    	}
-//    	
-   
-//    	board.loadFromServer((ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE));
-//    	
-//    	System.out.println(board.toString());
-    	
 		return true;
-		
 	}
 	
-	
-	public void handleGameState(Map<String, Object> msgDetails) {
-		if(gamegui != null) 
-			gamegui.setGameState((ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE));
-		
-		board.loadFromServer((ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE));
-		
-		
-		
+	private ArrayList<Integer> indexToCoord(int index) {
+	    int row = index / GameState.BOARD_SIZE + 1;
+	    int col = index % GameState.BOARD_SIZE + 1;
+	    return new ArrayList<>(Arrays.asList(row, col));
 	}
 	
-	public void handleStart(Map<String, Object> msgDetails) {
-		
-		/* TODO: Need to detect which player I am
-		 * Also need to convert the best move into what the server can read return: Map<String, Object> 
-		 */
-		
-		Move best = engine.searchBestMove(board, AmazonBoard.WHITE);
-		//gameClient.sendMoveMessage(TextConverter.convertTo(best));
-		
-		System.out.println("Handle Start");
-		
+	private void makeAIMove() {
+	    Timer timer = new Timer();
+	    timer.start();
+
+	    Move bestMove = Search.iterativeDeepening(currentGameState, timer);
+
+	    if (bestMove == null) return;
+
+	    ArrayList<Integer> qFrom = indexToCoord(bestMove.from);
+	    ArrayList<Integer> qTo   = indexToCoord(bestMove.to);
+	    ArrayList<Integer> arrow = indexToCoord(bestMove.arrow);
+
+	    // Apply locally
+	    currentGameState.applyMove(qFrom, qTo, arrow);
+	    gamegui.updateGameState(qFrom, qTo, arrow);
+
+	    // Send to server
+	    gameClient.sendMoveMessage(qFrom, qTo, arrow);
 	}
-	
-	public void handleMove(Map<String, Object> msgDetails) {
-		
-		System.out.println("Handle Move");
+
+	private void updatePlayerAssignments(Map<String, Object> msgDetails) {
+		String blackPlayer = (String) msgDetails.get(AmazonsGameMessage.PLAYER_BLACK);
+		String whitePlayer = (String) msgDetails.get(AmazonsGameMessage.PLAYER_WHITE);
+
+		if (blackPlayer != null) {
+			currentGameState.setBlackPlayer(blackPlayer);
+		}
+		if (whitePlayer != null) {
+			currentGameState.setWhitePlayer(whitePlayer);
+		}
+
+		String storedBlack = currentGameState.getBlackPlayer();
+		String storedWhite = currentGameState.getWhitePlayer();
+
+		if (userName.equals(storedBlack)) {
+			myColor = GameState.BLACK;
+		} else if (userName.equals(storedWhite)) {
+			myColor = GameState.WHITE;
+		}
 	}
-	
+
+	public GameState getCurrentGameState() {
+		return currentGameState;
+	}
+
+	public int getMyColor() {
+		return myColor;
+	}
 
 	@Override
 	public String userName() {
