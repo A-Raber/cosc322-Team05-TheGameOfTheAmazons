@@ -20,6 +20,13 @@ public class GameState {
 		this.board = new int[BOARD_CELLS];
 		this.sideToMove = BLACK;
 	}
+	
+	public GameState copy(){
+		GameState copy = new GameState();
+		System.arraycopy(this.board, 0, copy.board, 0, BOARD_CELLS);
+		copy.sideToMove = this.sideToMove;
+		return copy;
+	}
 
 	public void loadFromServerBoard(List<Integer> serverBoard) {
 		int writeIndex = 0;
@@ -37,6 +44,18 @@ public class GameState {
 		int to = XYtoBoardPosition(queenPositionNext);
 		int arrow = XYtoBoardPosition(arrowPosition);
 
+		int movingPiece = board[from];
+		board[from] = EMPTY;
+		board[to] = movingPiece;
+		board[arrow] = ARROW;
+		toggleSideToMove();
+	}
+
+	// Apply a Move object directly (using flat indices)
+	public void applyMove(Move move) {
+		int from = move.from;
+		int to = move.to;
+		int arrow = move.arrow;
 		int movingPiece = board[from];
 		board[from] = EMPTY;
 		board[to] = movingPiece;
