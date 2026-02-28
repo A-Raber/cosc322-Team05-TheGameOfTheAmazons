@@ -3,7 +3,6 @@ package ubc.cosc322;
 
 import java.util.ArrayList;
 import java.util.Map;
-import java.util.Random;
 
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
@@ -37,7 +36,7 @@ public class COSC322Test extends GamePlayer {
 		// Run a benchmark by adding "benchmark" as the first argument, followed by
 		// an optional number to define the number of trials (default of 1 million)
 		if (args.length >= 1 && "benchmark".equalsIgnoreCase(args[0])) {
-			int trials = 1_000_000;
+			int trials = 100;
 			if (args.length >= 2) {
 				try {
 					trials = Integer.parseInt(args[1]);
@@ -53,7 +52,7 @@ public class COSC322Test extends GamePlayer {
 		// default behavior for Player
 		// change if we ever implement more MoveGenerators in the future
 		if (args.length < 2) {
-			System.err.println("Usage: COSC322Test <username> <password> [greedy|random]");
+			System.err.println("Usage: COSC322Test <username> <password> [greedy|random|mcts]");
 			return;
 		}
 
@@ -62,6 +61,8 @@ public class COSC322Test extends GamePlayer {
 		MoveGenerator selectedGen;
 		if ("random".equalsIgnoreCase(genArg)) {
 			selectedGen = new RandomMoveGenerator();
+		} else if ("mcts".equalsIgnoreCase(genArg)) {
+			selectedGen = new MCTS();
 		} else {
 			selectedGen = new GreedyMoveGenerator();
 		}
