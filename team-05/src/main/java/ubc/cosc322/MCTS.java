@@ -224,10 +224,4 @@ public class MCTS extends AbstractMoveGenerator {
             toServerPosition(move.arrow)
         };
     }
-
-    @Override
-    public boolean hasAnyLegalMove(GameState gameState, int side) {
-        // TODO: Implement this if needed
-        return false;
-    }
 }
