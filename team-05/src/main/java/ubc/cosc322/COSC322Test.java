@@ -153,7 +153,10 @@ public class COSC322Test extends GamePlayer {
 		ArrayList<Integer>[] move = moveGenerator.generateMove(currentGameState);
 		if (move == null) {
 			int winningColor = (currentGameState.getSideToMove() == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
-			System.out.println("WINNER COLOR: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE"));
+			String winnerName = (winningColor == GameState.BLACK) ? currentGameState.getBlackPlayer() : currentGameState.getWhitePlayer();
+			if (winnerName == null) winnerName = "(unknown)";
+			String solverName = moveGenerator.getClass().getSimpleName();
+			System.out.println("Winner: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE") + "(" + winnerName + ") solver: " + solverName);
 			return;
 		}
 
@@ -165,7 +168,13 @@ public class COSC322Test extends GamePlayer {
 		int opponentSide = currentGameState.getSideToMove();
 		if (!moveGenerator.hasAnyLegalMove(currentGameState, opponentSide)) {
 			int winningColor = (opponentSide == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
-			System.out.println("WINNER COLOR: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE"));
+			String winnerName = (winningColor == GameState.BLACK) ? currentGameState.getBlackPlayer() : currentGameState.getWhitePlayer();
+			if (winnerName == null) winnerName = "(unknown)";
+			String solverName = moveGenerator.getClass().getSimpleName();
+			System.out.println("Winner: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE")
+				+ " - player: " + winnerName
+				+ "; local username: " + userName
+				+ "; solver: " + solverName);
 		}
 	}
 

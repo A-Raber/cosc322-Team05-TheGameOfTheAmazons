@@ -6,8 +6,11 @@ import java.util.Random;
 // A simple determinstic greedy move generator.
 // Mostly for the purpose of comparison with other methods
 
+// note: genuinely don't ever use this in the actual competition
+// since this will literally always lose to Random
+
 // It selects the move that will cause a queen to have the
-// most amount of mobility (empty squares) after moving. Ties
+// most amount of empty spaces to shoot at after moving. Ties
 // are handled by selecting the first one encountered.
 public class GreedyMoveGenerator extends AbstractMoveGenerator {
 
