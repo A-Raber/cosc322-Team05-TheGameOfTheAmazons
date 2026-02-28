@@ -25,8 +25,7 @@ public class COSC322Test extends GamePlayer {
 	private String userName = null;
 	private String passwd = null;
 	private final GameState currentGameState = new GameState();
-	private final Random random = new Random();
-	private final RandomMoveGenerator moveGenerator = new RandomMoveGenerator();
+	private final MoveGenerator moveGenerator;
 	private int myColor = GameState.BLACK;
 
 	/**
@@ -35,7 +34,39 @@ public class COSC322Test extends GamePlayer {
 	 * @param args for name and passwd (current, any string would work)
 	 */
 	public static void main(String[] args) {
-		COSC322Test player = new COSC322Test(args[0], args[1]);
+		// Run a benchmark by adding "benchmark" as the first argument, followed by
+		// an optional number to define the number of trials (default of 1 million)
+		if (args.length >= 1 && "benchmark".equalsIgnoreCase(args[0])) {
+			int trials = 1_000_000;
+			if (args.length >= 2) {
+				try {
+					trials = Integer.parseInt(args[1]);
+				} catch (NumberFormatException e) {
+					System.err.println("Invalid trial count, using default: " + trials);
+				}
+			}
+			MoveGeneratorBenchmark bench = new MoveGeneratorBenchmark(trials);
+			bench.run();
+			return;
+		}
+		
+		// default behavior for Player
+		// change if we ever implement more MoveGenerators in the future
+		if (args.length < 2) {
+			System.err.println("Usage: COSC322Test <username> <password> [greedy|random]");
+			return;
+		}
+
+		// optional third argument selects the move generator (default: greedy)
+		String genArg = args.length >= 3 ? args[2] : "greedy";
+		MoveGenerator selectedGen;
+		if ("random".equalsIgnoreCase(genArg)) {
+			selectedGen = new RandomMoveGenerator();
+		} else {
+			selectedGen = new GreedyMoveGenerator();
+		}
+
+		COSC322Test player = new COSC322Test(args[0], args[1], selectedGen);
 
 		if (player.getGameGUI() == null) {
 			player.Go();
@@ -56,8 +87,13 @@ public class COSC322Test extends GamePlayer {
 	 * @param passwd
 	 */
 	public COSC322Test(String userName, String passwd) {
+		this(userName, passwd, new GreedyMoveGenerator());
+	}
+
+	public COSC322Test(String userName, String passwd, MoveGenerator moveGenerator) {
 		this.userName = userName;
 		this.passwd = passwd;
+		this.moveGenerator = moveGenerator == null ? new GreedyMoveGenerator() : moveGenerator;
 
 		// To make a GUI-based player, create an instance of BaseGameGUI
 		// and implement the method getGameGUI() accordingly
@@ -99,7 +135,7 @@ public class COSC322Test extends GamePlayer {
 
 		} else if (GameMessage.GAME_ACTION_MOVE.equals(messageType)) {
 			ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
-			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_NEXT);
+			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.Queen_POS_NEXT);
 			ArrayList<Integer> arrowPosition = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.ARROW_POS);
 			
 			currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
@@ -114,14 +150,14 @@ public class COSC322Test extends GamePlayer {
 
 	@SuppressWarnings("unchecked")
 	private void makeAndSendMove() {
-		ArrayList<Integer>[] move = moveGenerator.generateMove(currentGameState, random);
+		ArrayList<Integer>[] move = moveGenerator.generateMove(currentGameState);
 		if (move == null) {
 			int winningColor = (currentGameState.getSideToMove() == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
-			System.out.println("Winner color: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE"));
+			System.out.println("WINNER COLOR: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE"));
 			return;
 		}
 
-		System.out.println("Random move: queen " + move[0] + " -> " + move[1] + ", arrow -> " + move[2]);
+		System.out.println("Move: queen " + move[0] + " -> " + move[1] + ", arrow -> " + move[2]);
 		currentGameState.applyMove(move[0], move[1], move[2]);
 		gamegui.updateGameState(move[0], move[1], move[2]);
 		gameClient.sendMoveMessage(move[0], move[1], move[2]);
@@ -129,7 +165,7 @@ public class COSC322Test extends GamePlayer {
 		int opponentSide = currentGameState.getSideToMove();
 		if (!moveGenerator.hasAnyLegalMove(currentGameState, opponentSide)) {
 			int winningColor = (opponentSide == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
-			System.out.println("Winner color: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE"));
+			System.out.println("WINNER COLOR: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE"));
 		}
 	}
 

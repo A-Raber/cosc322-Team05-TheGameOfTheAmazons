@@ -87,6 +87,19 @@ public class GameState {
 		sideToMove = (sideToMove == BLACK) ? WHITE : BLACK;
 	}
 
+	// utility methods for loading test states for benchmarking
+	public void setCell(int row, int col, int value) {
+		board[row * BOARD_SIZE + col] = value;
+	}
+	public void setCell(int idx, int value) {
+		board[idx] = value;
+	}
+	public void clearBoard() {
+		for (int i = 0; i < BOARD_CELLS; i++) {
+			board[i] = EMPTY;
+		}
+	}
+
 	private int XYtoBoardPosition(List<Integer> position) {
 		int row = position.get(0) - 1;
 		int col = position.get(1) - 1;
