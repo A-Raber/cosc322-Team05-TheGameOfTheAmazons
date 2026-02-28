@@ -25,31 +25,86 @@ abstract class AbstractMoveGenerator implements MoveGenerator {
 		NORTH, SOUTH, WEST, EAST, NORTH_WEST, NORTH_EAST, SOUTH_WEST, SOUTH_EAST
 	};
 
-	protected ArrayList<Integer> collectQueenPositions(int[] board, int side) {
-		ArrayList<Integer> queens = new ArrayList<>();
-		for (int i = 0; i < GameState.BOARD_CELLS; i++) {
-			if (board[i] == side) {
-				queens.add(i);
-			}
-		}
-		return queens;
+	// thread-local reusable buffers
+	private final ThreadLocal<ArrayList<Integer>> threadLocalQueens = ThreadLocal.withInitial(() -> new ArrayList<>());
+	private final ThreadLocal<ArrayList<Integer>> threadLocalDestinations = ThreadLocal.withInitial(() -> new ArrayList<>());
+	private final ThreadLocal<ArrayList<Integer>> threadLocalArrowTargets = ThreadLocal.withInitial(() -> new ArrayList<>());
+
+	// getters for buffers
+	protected ArrayList<Integer> queensBuffer() {
+		return threadLocalQueens.get();
 	}
 
-	protected ArrayList<Integer> getArrowTargetsAfterMove(int[] board, int from, int to, int side) {
-		int fromValue = board[from];
-		int toValue = board[to];
+	protected ArrayList<Integer> destinationsBuffer() {
+		return threadLocalDestinations.get();
+	}
 
-		board[from] = GameState.EMPTY;
-		board[to] = side;
-		ArrayList<Integer> arrowTargets = getReachableSquares(board, to);
-		board[to] = toValue;
-		board[from] = fromValue;
+	protected ArrayList<Integer> arrowTargetsBuffer() {
+		return threadLocalArrowTargets.get();
+	}
 
-		return arrowTargets;
+	// fill the provided list with queen positions.
+	protected void collectQueenPositions(int[] board, int side, ArrayList<Integer> dest) {
+		dest.clear();
+		for (int i = 0; i < GameState.BOARD_CELLS; i++) {
+			if (board[i] == side) {
+				dest.add(i);
+			}
+		}
+	}
+
+	// perform move on board temporarily and write reachable squares into result.
+	protected ArrayList<Integer> getArrowTargetsAfterMoveInto(int[] board, int from, int to, int side, ArrayList<Integer> result) {
+		// avoid mutating the shared board array, since mutating it breaks thread-safety.
+
+		// compute reachable squares from 'to' treating 'from' as EMPTY
+		// and 'to' as occupied by 'side' via conditional checks.
+		getReachableSquaresWithMoveInto(board, to, from, to, side, result);
+		return result;
+	}
+
+	// Compute reachable squares from pos, but treat fromIdx as EMPTY and
+	// toIdx as occupied by toSide without mutating the board array.
+	protected ArrayList<Integer> getReachableSquaresWithMoveInto(int[] board, int pos, int fromIdx, int toIdx, int toSide, ArrayList<Integer> result) {
+		result.clear();
+
+		for (int offset : DIRECTION_OFFSETS) {
+			int current = pos;
+			while (true) {
+				int next = current + offset;
+				if (!isInsideBoard(next)) {
+					break;
+				}
+				if (crossesRowBoundary(current, next)) {
+					break;
+				}
+				int cellValue = board[next];
+				if (next == fromIdx) {
+					cellValue = GameState.EMPTY;
+				} else if (next == toIdx) {
+					cellValue = toSide;
+				}
+				if (cellValue != GameState.EMPTY) {
+					break;
+				}
+
+				result.add(next);
+				current = next;
+			}
+		}
+
+		return result;
 	}
 
 	protected ArrayList<Integer> getReachableSquares(int[] board, int pos) {
 		ArrayList<Integer> result = new ArrayList<>();
+		getReachableSquaresInto(board, pos, result);
+		return result;
+	}
+
+	// fill provided list with reachable squares from pos.
+	protected ArrayList<Integer> getReachableSquaresInto(int[] board, int pos, ArrayList<Integer> result) {
+		result.clear();
 
 		for (int offset : DIRECTION_OFFSETS) {
 			int current = pos;
@@ -94,13 +149,17 @@ abstract class AbstractMoveGenerator implements MoveGenerator {
 
 	// Utility to test whether a side has any legal move.
 	public boolean hasAnyLegalMove(GameState gameState, int side) {
-		int[] board = gameState.copyBoard();
-		ArrayList<Integer> queens = collectQueenPositions(board, side);
+		int[] board = gameState.getBoardRef();
+		ArrayList<Integer> queens = queensBuffer();
+		ArrayList<Integer> destinations = destinationsBuffer();
+		ArrayList<Integer> arrowTargets = arrowTargetsBuffer();
+
+		collectQueenPositions(board, side, queens);
 
 		for (int queenPos : queens) {
-			ArrayList<Integer> destinations = getReachableSquares(board, queenPos);
+			getReachableSquaresInto(board, queenPos, destinations);
 			for (int destination : destinations) {
-				ArrayList<Integer> arrowTargets = getArrowTargetsAfterMove(board, queenPos, destination, side);
+				getArrowTargetsAfterMoveInto(board, queenPos, destination, side, arrowTargets);
 				if (!arrowTargets.isEmpty()) {
 					return true;
 				}

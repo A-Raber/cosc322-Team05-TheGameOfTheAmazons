@@ -27,11 +27,6 @@ public class MoveGeneratorBenchmark {
         GameState state = createSampleState();
 
         for (MoveGenerator gen : generators) {
-            // a short warm-up to let the JIT compile
-            for (int i = 0; i < 10_000; i++) {
-                gen.generateMove(state);
-            }
-
             long start = System.nanoTime();
             for (int i = 0; i < trials; i++) {
                 gen.generateMove(state);
