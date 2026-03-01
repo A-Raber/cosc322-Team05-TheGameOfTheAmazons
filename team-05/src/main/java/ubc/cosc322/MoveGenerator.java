@@ -9,7 +9,7 @@ public interface MoveGenerator {
 	boolean hasAnyLegalMove(GameState gameState, int side);
 }
 
-// Base class for move generators.
+// Base class for move generators (extend this class)
 
 abstract class AbstractMoveGenerator implements MoveGenerator {
 
