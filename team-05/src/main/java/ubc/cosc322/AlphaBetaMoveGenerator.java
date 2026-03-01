@@ -30,6 +30,9 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         GameState rootState = gameState.copy();
         int rootSide = rootState.getSideToMove();
 
+        timer = new Timer();
+        timer.start();
+
         MoveBuffer rootMoves = plyMoveBuffers[0];
         rootMoves.clear();
         generateMoves(rootState, rootSide, rootMoves);
@@ -37,9 +40,6 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         if (rootMoves.size == 0) {
             return null;
         }
-
-        timer = new Timer();
-        timer.start();
 
         int bestFrom = rootMoves.from[0];
         int bestTo = rootMoves.to[0];
