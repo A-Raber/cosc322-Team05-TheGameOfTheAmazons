@@ -139,7 +139,7 @@ public class COSC322Test extends GamePlayer {
 
 		} else if (GameMessage.GAME_ACTION_MOVE.equals(messageType)) {
 			ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
-			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.Queen_POS_NEXT); // Queen here can't be capitalized because the stupid API labeled both "QUEEN" actions differently
+			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_NEXT); // Queen here can't be capitalized because the stupid API labeled both "QUEEN" actions differently
 			ArrayList<Integer> arrowPosition = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.ARROW_POS);
 			
 			System.out.println("Opponent: queen" + queenCurrent.toString() + " -> " + queenNext.toString() + ", arrow -> " + arrowPosition.toString());
