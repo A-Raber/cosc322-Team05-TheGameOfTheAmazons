@@ -50,10 +50,11 @@ public class COSC322Test extends GamePlayer {
 			return;
 		}
 		
+
 		// default behavior for Player
-		// change if we ever implement more MoveGenerators in the future
+		// now supports greedy, random, or mcts
 		if (args.length < 2) {
-			System.err.println("Usage: COSC322Test <username> <password> [greedy|random]");
+			System.err.println("Usage: COSC322Test <username> <password> [greedy|random|mcts]");
 			return;
 		}
 
@@ -62,6 +63,8 @@ public class COSC322Test extends GamePlayer {
 		MoveGenerator selectedGen;
 		if ("random".equalsIgnoreCase(genArg)) {
 			selectedGen = new RandomMoveGenerator();
+		} else if ("mcts".equalsIgnoreCase(genArg)) {
+			selectedGen = new MCTS();
 		} else {
 			selectedGen = new GreedyMoveGenerator();
 		}
@@ -135,7 +138,7 @@ public class COSC322Test extends GamePlayer {
 
 		} else if (GameMessage.GAME_ACTION_MOVE.equals(messageType)) {
 			ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
-			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.Queen_POS_NEXT);
+			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_NEXT);
 			ArrayList<Integer> arrowPosition = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.ARROW_POS);
 			
 			currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
