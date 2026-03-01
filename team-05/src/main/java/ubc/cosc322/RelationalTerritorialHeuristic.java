@@ -95,7 +95,7 @@ public class RelationalTerritorialHeuristic {
                     if (board[next] != GameState.EMPTY) {
                         break;
                     }
-                    if (nextDistance >= dist[next]) {
+                    if (dist[next] != INF) {
                         ray = next;
                         continue;
                     }

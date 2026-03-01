@@ -123,7 +123,7 @@ public class COSC322Test extends GamePlayer {
 		// see the method GamePlayer.handleGameMessage() in the game-client-api
 		// document.
 		
-		System.out.println("handleGameMessage -> type: " + messageType + ", details: " + msgDetails);
+//		System.out.println("handleGameMessage -> type: " + messageType + ", details: " + msgDetails);
 		if (GameMessage.GAME_STATE_BOARD.equals(messageType)) {
 			ArrayList<Integer> serverBoard = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.GAME_STATE);
 			
@@ -139,9 +139,10 @@ public class COSC322Test extends GamePlayer {
 
 		} else if (GameMessage.GAME_ACTION_MOVE.equals(messageType)) {
 			ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
-			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_NEXT);
+			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.Queen_POS_NEXT); // Queen here can't be capitalized because the stupid API labeled both "QUEEN" actions differently
 			ArrayList<Integer> arrowPosition = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.ARROW_POS);
 			
+			System.out.println("Opponent: queen" + queenCurrent.toString() + " -> " + queenNext.toString() + ", arrow -> " + arrowPosition.toString());
 			currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
 			gamegui.updateGameState(queenCurrent, queenNext, arrowPosition);
 
@@ -152,15 +153,11 @@ public class COSC322Test extends GamePlayer {
 		return true;
 	}
 
-	@SuppressWarnings("unchecked")
 	private void makeAndSendMove() {
 		ArrayList<Integer>[] move = moveGenerator.generateMove(currentGameState);
 		if (move == null) {
 			int winningColor = (currentGameState.getSideToMove() == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
-			String winnerName = (winningColor == GameState.BLACK) ? currentGameState.getBlackPlayer() : currentGameState.getWhitePlayer();
-			if (winnerName == null) winnerName = "(unknown)";
-			String solverName = moveGenerator.getClass().getSimpleName();
-			System.out.println("Winner: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE") + "(" + winnerName + ") solver: " + solverName);
+			printResults(winningColor);
 			return;
 		}
 
@@ -172,13 +169,16 @@ public class COSC322Test extends GamePlayer {
 		int opponentSide = currentGameState.getSideToMove();
 		if (!moveGenerator.hasAnyLegalMove(currentGameState, opponentSide)) {
 			int winningColor = (opponentSide == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
-			String winnerName = (winningColor == GameState.BLACK) ? currentGameState.getBlackPlayer() : currentGameState.getWhitePlayer();
-			if (winnerName == null) winnerName = "(unknown)";
-			String solverName = moveGenerator.getClass().getSimpleName();
-			System.out.println("Winner: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE") + "(" + winnerName + ") solver: " + solverName);
+			printResults(winningColor);
 		}
 	}
-
+	private void printResults(int winningColor) {
+		String winnerName = (winningColor == GameState.BLACK) ? currentGameState.getBlackPlayer() : currentGameState.getWhitePlayer();
+		if (winnerName == null) winnerName = "(unknown)";
+		String solverName = moveGenerator.getClass().getSimpleName();
+		System.out.println("Winner: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE") + "(" + winnerName + ")");
+		System.out.println("Player Side:" + (getMyColor() == GameState.BLACK ? "BLACK" : "WHITE") + " | Solver: " + solverName);
+	}
 	private void updatePlayerAssignments(Map<String, Object> msgDetails) {
 		String blackPlayer = (String) msgDetails.get(AmazonsGameMessage.PLAYER_BLACK);
 		String whitePlayer = (String) msgDetails.get(AmazonsGameMessage.PLAYER_WHITE);

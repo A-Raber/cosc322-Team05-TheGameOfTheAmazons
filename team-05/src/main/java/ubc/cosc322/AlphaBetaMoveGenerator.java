@@ -41,11 +41,6 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         timer = new Timer();
         timer.start();
 
-        int[] previousIterationScores = new int[rootMoves.size];
-        for (int i = 0; i < previousIterationScores.length; i++) {
-            previousIterationScores[i] = 0;
-        }
-
         int bestFrom = rootMoves.from[0];
         int bestTo = rootMoves.to[0];
         int bestArrow = rootMoves.arrow[0];
@@ -58,7 +53,7 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
             int iterationBestScore = NEG_INF;
 
             try {
-                orderRootMoves(rootMoves, previousIterationScores, bestFrom, bestTo, bestArrow);
+                orderRootMoves(rootMoves, rootMoves.score, bestFrom, bestTo, bestArrow);
 
                 int alpha = NEG_INF;
                 int beta = POS_INF;
@@ -74,7 +69,7 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
                     int score = -negamax(rootState, depth - 1, 1, -beta, -alpha);
                     rootState.undoMove(from, to, arrow, movingPiece);
 
-                    previousIterationScores[i] = score;
+                    rootMoves.score[i] = score;
 
                     if (score > iterationBestScore) {
                         iterationBestScore = score;
@@ -113,13 +108,11 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
             return heuristic.evaluate(state, sideToMove);
         }
 
-        if (!hasAnyLegalMove(state, sideToMove)) {
-            return -MATE_SCORE + ply;
-        }
-
         MoveBuffer moves = plyMoveBuffers[Math.min(ply, MAX_PLY - 1)];
         moves.clear();
         generateMoves(state, sideToMove, moves);
+
+        if (moves.size == 0) return -MATE_SCORE + ply;
 
         orderMoves(ply, moves);
 
@@ -156,7 +149,7 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
             if (rootMoves.from[i] == bestFrom && rootMoves.to[i] == bestTo && rootMoves.arrow[i] == bestArrow) {
                 score += 1_000_000;
             }
-            rootMoves.score[i] = score;
+            scores[i] = score;
         }
 
         for (int i = 0; i < rootMoves.size; i++) {
