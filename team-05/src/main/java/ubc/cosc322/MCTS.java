@@ -2,19 +2,43 @@ package ubc.cosc322;
 
 import java.util.*;
 
-public class MCTS implements MoveGenerator {
+// Helper methods and direction constants are inherited from AbstractMoveGenerator
+public class MCTS extends AbstractMoveGenerator {
     private static final double EXPLORATION_CONSTANT = Math.sqrt(2);
     private final Random random = new Random();
+
+    // Change DEFAULT_MAX_NODES to match your available memory.
+    // From my testing, every GB of ram is good for around 1 million extra nodes
+    // It starts to play really well past the 8 million mark
+    // Keep in mind that every 100K nodes = 34-39 ms per call
+    private static final int DEFAULT_MAX_NODES = 15_000_000;
+    private final int maxNodes;
+
+    private int nodeCount;
+    // one-time warning flag when node cap is hit
+    private boolean warnedNodeCap = false;
+
+    public MCTS() {
+        this(DEFAULT_MAX_NODES);
+    }
+
+    public MCTS(int maxNodes) {
+        this.maxNodes = Math.max(1, maxNodes);
+    }
 
     @Override
     public ArrayList<Integer>[] generateMove(GameState gameState) {
         Timer timer = new Timer();
         timer.start();
         MCTSNode root = new MCTSNode(gameState.copy());
-        System.out.println("Starting MCTS! Side to move: " + gameState.getSideToMove());
+        // System.out.println("Starting MCTS! Side to move: " + gameState.getSideToMove());
+        
+        this.nodeCount = 1;
+        final int rootPlayer = gameState.getSideToMove();
+
         int iterations = 0;
         int MAX_ITERATIONS = 20000; // Tune as needed
-        while (!timer.timeUp() && iterations < MAX_ITERATIONS) {
+        while (!timer.timeUp() && iterations < MAX_ITERATIONS && nodeCount < maxNodes) {
             // 1. Selection
             MCTSNode node = selectPromisingNode(root);
             // 2. Expansion
@@ -26,12 +50,12 @@ public class MCTS implements MoveGenerator {
             if (!node.children.isEmpty()) {
                 nodeToSimulate = node.children.get(random.nextInt(node.children.size()));
             }
-            int result = simulateRandomPlayout(nodeToSimulate.state.copy());
+            int result = simulateRandomPlayout(nodeToSimulate.state.copy(), rootPlayer);
             // 4. Backpropagation
             backPropagate(nodeToSimulate, result);
             iterations++;
         }
-        //System.out.println("MCTS iterations: " + iterations);
+        // System.out.println("MCTS iterations: " + iterations);
         // Return the move with the highest visit count
         MCTSNode bestChild = root.children.stream()
                 .max(Comparator.comparingInt(n -> n.visitCount))
@@ -54,16 +78,25 @@ public class MCTS implements MoveGenerator {
     private void expandNode(MCTSNode node) {
         List<Move> moves = getAllPossibleMoves(node.state);
         for (Move move : moves) {
+            if (nodeCount >= maxNodes) {
+                // reached global node cap, stop expanding further
+                if (!warnedNodeCap) {
+                    System.err.println("Warning: MCTS node cap reached (" + maxNodes + ")");
+                    warnedNodeCap = true;
+                }
+                break;
+            }
             GameState nextState = node.state.copy();
             applyMove(nextState, move);
             node.children.add(new MCTSNode(nextState, node, move));
+            nodeCount++;
         }
     }
 
     // Use a max playout depth for heuristic evaluation
     private static final int MAX_PLAYOUT_DEPTH = 30;
 
-    private int simulateRandomPlayout(GameState state) {
+    private int simulateRandomPlayout(GameState state, int rootPlayer) {
         int depth = 0;
         while (!isTerminal(state) && depth < MAX_PLAYOUT_DEPTH) {
             List<Move> moves = getAllPossibleMoves(state);
@@ -73,24 +106,23 @@ public class MCTS implements MoveGenerator {
             depth++;
         }
         if (isTerminal(state)) {
-            return getResult(state);
+            return getResult(state, rootPlayer);
         } else {
             // Use territory control heuristic
-            return evaluateTerritory(state);
+            return evaluateTerritory(state, rootPlayer);
         }
     }
 
     // Heuristic: 1 if root player has much more territory, 0 if much less, 0.5 if close
-    private int evaluateTerritory(GameState state) {
-        int mySide = state.getSideToMove() == GameState.BLACK ? GameState.WHITE : GameState.BLACK; // previous player
-        int oppSide = state.getSideToMove();
-        int myTerritory = countTerritory(state, mySide);
+    private int evaluateTerritory(GameState state, int rootPlayer) {
+        int myTerritory = countTerritory(state, rootPlayer);
+        int oppSide = (rootPlayer == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
         int oppTerritory = countTerritory(state, oppSide);
         int diff = myTerritory - oppTerritory;
-        System.out.println("Heuristic eval: myTerritory=" + myTerritory + ", oppTerritory=" + oppTerritory + ", diff=" + diff);
+        // System.out.println("Heuristic eval: myTerritory=" + myTerritory + ", oppTerritory=" + oppTerritory + ", diff=" + diff);
         if (diff > 2) return 1;
         if (diff < -2) return 0;
-        return 0; 
+        return 0;
     }
 
     // Count number of squares reachable by a side
@@ -143,20 +175,19 @@ public class MCTS implements MoveGenerator {
 
     // Generate all legal moves for the current player, with debug output
     private List<Move> getAllPossibleMoves(GameState state) {
-        int[] board = state.copyBoard();
+        int[] board = state.getBoardRef();
         int sideToMove = state.getSideToMove();
         ArrayList<Move> moves = new ArrayList<>();
-      
-        ArrayList<Integer> queens = new ArrayList<>();
-        for (int i = 0; i < GameState.BOARD_CELLS; i++) {
-            if (board[i] == sideToMove) {
-                queens.add(i);
-            }
-        }
+
+        ArrayList<Integer> queens = queensBuffer();
+        ArrayList<Integer> destinations = destinationsBuffer();
+        ArrayList<Integer> arrowTargets = arrowTargetsBuffer();
+
+        collectQueenPositions(board, sideToMove, queens);
         for (int queenPos : queens) {
-            ArrayList<Integer> destinations = getReachableSquares(board, queenPos);
+            getReachableSquaresInto(board, queenPos, destinations);
             for (int dest : destinations) {
-                ArrayList<Integer> arrowTargets = getArrowTargetsAfterMove(board, queenPos, dest, sideToMove);
+                getArrowTargetsAfterMoveInto(board, queenPos, dest, sideToMove, arrowTargets);
                 for (int arrow : arrowTargets) {
                     moves.add(new Move(queenPos, dest, arrow));
                 }
@@ -172,10 +203,10 @@ public class MCTS implements MoveGenerator {
     }
 
     // Return 1 if the previous player (not the one to move) has won, 0 otherwise, with debug
-    private int getResult(GameState state) {
+    private int getResult(GameState state, int rootPlayer) {
         int winner = (state.getSideToMove() == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
-        System.out.println("Game ended. Winner: " + (winner == GameState.WHITE ? "WHITE" : "BLACK"));
-        return (winner == GameState.WHITE) ? 1 : 0;
+        // System.out.println("Game ended. Winner: " + (winner == GameState.WHITE ? "WHITE" : "BLACK"));
+        return (winner == rootPlayer) ? 1 : 0;
     }
 
     // Apply a move to the state
@@ -192,76 +223,5 @@ public class MCTS implements MoveGenerator {
             toServerPosition(move.to),
             toServerPosition(move.arrow)
         };
-    }
-
-    
-    private static final int NORTH = -GameState.BOARD_SIZE;
-    private static final int SOUTH = GameState.BOARD_SIZE;
-    private static final int WEST = -1;
-    private static final int EAST = 1;
-    private static final int NORTH_WEST = -GameState.BOARD_SIZE - 1;
-    private static final int NORTH_EAST = -GameState.BOARD_SIZE + 1;
-    private static final int SOUTH_WEST = GameState.BOARD_SIZE - 1;
-    private static final int SOUTH_EAST = GameState.BOARD_SIZE + 1;
-    private static final int[] DIRECTION_OFFSETS = {
-        NORTH, SOUTH, WEST, EAST, NORTH_WEST, NORTH_EAST, SOUTH_WEST, SOUTH_EAST
-    };
-
-    private ArrayList<Integer> getReachableSquares(int[] board, int pos) {
-        ArrayList<Integer> result = new ArrayList<>();
-        for (int offset : DIRECTION_OFFSETS) {
-            int current = pos;
-            while (true) {
-                int next = current + offset;
-                if (!isInsideBoard(next)) {
-                    break;
-                }
-                if (crossesRowBoundary(current, next)) {
-                    break;
-                }
-                if (board[next] != GameState.EMPTY) {
-                    break;
-                }
-                result.add(next);
-                current = next;
-            }
-        }
-        return result;
-    }
-
-    private ArrayList<Integer> getArrowTargetsAfterMove(int[] board, int from, int to, int side) {
-        int fromValue = board[from];
-        int toValue = board[to];
-        board[from] = GameState.EMPTY;
-        board[to] = side;
-        ArrayList<Integer> arrowTargets = getReachableSquares(board, to);
-        board[to] = toValue;
-        board[from] = fromValue;
-        return arrowTargets;
-    }
-
-    private static boolean isInsideBoard(int index) {
-        return index >= 0 && index < GameState.BOARD_CELLS;
-    }
-
-    private static boolean crossesRowBoundary(int from, int to) {
-        return Math.abs(columnOf(from) - columnOf(to)) > 1;
-    }
-
-    private static int columnOf(int index) {
-        return index % GameState.BOARD_SIZE;
-    }
-
-    private static ArrayList<Integer> toServerPosition(int flatIndex) {
-        ArrayList<Integer> pos = new ArrayList<>(2);
-        pos.add(flatIndex / GameState.BOARD_SIZE + 1);
-        pos.add(flatIndex % GameState.BOARD_SIZE + 1);
-        return pos;
-    }
-
-    @Override
-    public boolean hasAnyLegalMove(GameState gameState, int side) {
-        // TODO: Implement this if needed
-        return false;
     }
 }

@@ -78,8 +78,18 @@ public class GameState {
 		this.sideToMove = sideToMove;
 	}
 
+	public int[] getBoard() {
+		return this.board;
+	}
+
 	public int[] copyBoard() {
 		return board.clone();
+	}
+
+	// Return internal board array reference for performance-sensitive code that
+	// will only temporarily mutate and restore the board. Use with care.
+	public int[] getBoardRef() {
+		return board;
 	}
 
 	public int getCell(int row, int col) {

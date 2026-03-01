@@ -17,22 +17,26 @@ public class GreedyMoveGenerator extends AbstractMoveGenerator {
     @Override
     @SuppressWarnings("unchecked")
     public ArrayList<Integer>[] generateMove(GameState gameState) {
-        int[] board = gameState.copyBoard();
+        int[] board = gameState.getBoardRef();
         int sideToMove = gameState.getSideToMove();
 
-        ArrayList<Integer> queens = collectQueenPositions(board, sideToMove);
+        ArrayList<Integer> queens = queensBuffer();
+        ArrayList<Integer> destinations = destinationsBuffer();
+        ArrayList<Integer> arrowTargets = arrowTargetsBuffer();
 
         int bestQueen = -1;
         int bestDest = -1;
         int bestArrow = -1;
         int bestScore = -1;
 
+        collectQueenPositions(board, sideToMove, queens);
+
         for (int queenPos : queens) {
-            ArrayList<Integer> destinations = getReachableSquares(board, queenPos);
+            getReachableSquaresInto(board, queenPos, destinations);
             if (destinations.isEmpty()) continue;
 
             for (int dest : destinations) {
-                ArrayList<Integer> arrowTargets = getArrowTargetsAfterMove(board, queenPos, dest, sideToMove);
+                getArrowTargetsAfterMoveInto(board, queenPos, dest, sideToMove, arrowTargets);
                 if (arrowTargets.isEmpty()) continue;
 
                 int score = arrowTargets.size();

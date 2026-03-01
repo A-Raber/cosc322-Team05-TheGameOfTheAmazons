@@ -20,26 +20,24 @@ public class MoveGeneratorBenchmark {
 
         // ADD ANY MOVE GENERATORS HERE
         MoveGenerator[] generators = new MoveGenerator[] {
-            new RandomMoveGenerator(),
-            new GreedyMoveGenerator()
+//            new RandomMoveGenerator(),
+//            new GreedyMoveGenerator(),
+            new MCTS()
         };
 
         GameState state = createSampleState();
 
         for (MoveGenerator gen : generators) {
-            // a short warm-up to let the JIT compile
-            for (int i = 0; i < 10_000; i++) {
-                gen.generateMove(state);
-            }
-
             long start = System.nanoTime();
             for (int i = 0; i < trials; i++) {
                 gen.generateMove(state);
             }
             long elapsed = System.nanoTime() - start;
-
-                System.out.printf("%s: total %d ns, average %.2f ns per call\n",
-                    gen.getClass().getSimpleName(), elapsed, (double) elapsed / trials);
+            double elapsedMs = elapsed / 1_000_000.0;
+            double avgNs = (double) elapsed / trials;
+            double avgMs = avgNs / 1_000_000.0;
+            System.out.printf("%s: total %d ns (%.2f ms), average %.2f ns (%.4f ms) per call\n",
+                gen.getClass().getSimpleName(), elapsed, elapsedMs, avgNs, avgMs);
         }
     }
 

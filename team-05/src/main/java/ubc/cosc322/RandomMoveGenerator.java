@@ -16,21 +16,24 @@ public class RandomMoveGenerator extends AbstractMoveGenerator {
 	@Override
 	@SuppressWarnings("unchecked")
 	public ArrayList<Integer>[] generateMove(GameState gameState) {
-		
-		int[] board = gameState.copyBoard();
+		int[] board = gameState.getBoardRef();
 		int sideToMove = gameState.getSideToMove();
 
-		ArrayList<Integer> queens = collectQueenPositions(board, sideToMove);
+		ArrayList<Integer> queens = queensBuffer();
+		ArrayList<Integer> destinations = destinationsBuffer();
+		ArrayList<Integer> arrowTargets = arrowTargetsBuffer();
+
+		collectQueenPositions(board, sideToMove, queens);
 		Collections.shuffle(queens, random);
 
 		for (int queenPos : queens) {
-			ArrayList<Integer> destinations = getReachableSquares(board, queenPos);
+			getReachableSquaresInto(board, queenPos, destinations);
 			if (destinations.isEmpty()) {
 				continue;
 			}
 
 			int destination = destinations.get(random.nextInt(destinations.size()));
-			ArrayList<Integer> arrowTargets = getArrowTargetsAfterMove(board, queenPos, destination, sideToMove);
+			getArrowTargetsAfterMoveInto(board, queenPos, destination, sideToMove, arrowTargets);
 
 			if (arrowTargets.isEmpty()) {
 				continue;
