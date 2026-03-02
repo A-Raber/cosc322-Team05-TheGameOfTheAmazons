@@ -53,7 +53,7 @@ public class COSC322Test extends GamePlayer {
 		// default behavior for Player
 		// now supports greedy, random, or mcts
 		if (args.length < 2) {
-			System.err.println("Usage: COSC322Test <username> <password> [greedy|random|mcts]");
+			System.err.println("Usage: COSC322Test <username> <password> [greedy|random|mcts|human]");
 			return;
 		}
 
@@ -64,6 +64,8 @@ public class COSC322Test extends GamePlayer {
 			selectedGen = new RandomMoveGenerator();
 		} else if ("mcts".equalsIgnoreCase(genArg)) {
 			selectedGen = new MCTS();
+		} else if ("human".equalsIgnoreCase(genArg)) {
+			selectedGen = new HumanMoveGenerator();
 		} else {
 			selectedGen = new GreedyMoveGenerator();
 		}
