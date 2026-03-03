@@ -20,9 +20,10 @@ public class MoveGeneratorBenchmark {
 
         // ADD ANY MOVE GENERATORS HERE
         MoveGenerator[] generators = new MoveGenerator[] {
-//            new RandomMoveGenerator(),
-//            new GreedyMoveGenerator(),
-            new MCTS()
+            new RandomMoveGenerator(),
+            new GreedyMoveGenerator(),
+            new MCTS(250_000),
+            new AlphaBetaMoveGenerator()
         };
 
         GameState state = createSampleState();

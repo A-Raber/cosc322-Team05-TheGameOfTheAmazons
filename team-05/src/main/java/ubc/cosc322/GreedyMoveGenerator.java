@@ -1,7 +1,6 @@
 package ubc.cosc322;
 
 import java.util.ArrayList;
-import java.util.Random;
 
 // A simple determinstic greedy move generator.
 // Mostly for the purpose of comparison with other methods
