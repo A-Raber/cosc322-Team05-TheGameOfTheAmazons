@@ -154,6 +154,16 @@ public class COSC322Test extends GamePlayer {
 
 	@SuppressWarnings("unchecked")
 	private void makeAndSendMove() {
+		int sideToMove = currentGameState.getSideToMove();
+		if (!moveGenerator.hasAnyLegalMove(currentGameState, sideToMove)) {
+			int winningColor = (sideToMove == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
+			String winnerName = (winningColor == GameState.BLACK) ? currentGameState.getBlackPlayer() : currentGameState.getWhitePlayer();
+			if (winnerName == null) winnerName = "(unknown)";
+			String solverName = moveGenerator.getClass().getSimpleName();
+			System.out.println("Winner: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE") + "(" + winnerName + ") solver: " + solverName);
+			return;
+		}
+
 		ArrayList<Integer>[] move = moveGenerator.generateMove(currentGameState);
 		if (move == null) {
 			int winningColor = (currentGameState.getSideToMove() == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;

@@ -41,6 +41,17 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         timer = new Timer();
         timer.start();
 
+        // Age history table: halve all entries to retain relative ordering
+        // while decaying stale data from previous game positions
+        for (int i = 0; i < GameState.BOARD_CELLS; i++) {
+            for (int j = 0; j < GameState.BOARD_CELLS; j++) {
+                history[i][j] >>= 1;
+            }
+        }
+        // Clear killer moves from previous search
+        java.util.Arrays.fill(killerMoveA, 0);
+        java.util.Arrays.fill(killerMoveB, 0);
+
         int[] previousIterationScores = new int[rootMoves.size];
         for (int i = 0; i < previousIterationScores.length; i++) {
             previousIterationScores[i] = 0;
@@ -110,16 +121,19 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         int sideToMove = state.getSideToMove();
 
         if (depth <= 0) {
+            if (!hasAnyLegalMove(state, sideToMove)) {
+                return -MATE_SCORE + ply;
+            }
             return heuristic.evaluate(state, sideToMove);
-        }
-
-        if (!hasAnyLegalMove(state, sideToMove)) {
-            return -MATE_SCORE + ply;
         }
 
         MoveBuffer moves = plyMoveBuffers[Math.min(ply, MAX_PLY - 1)];
         moves.clear();
         generateMoves(state, sideToMove, moves);
+
+        if (moves.size == 0) {
+            return -MATE_SCORE + ply;
+        }
 
         orderMoves(ply, moves);
 
