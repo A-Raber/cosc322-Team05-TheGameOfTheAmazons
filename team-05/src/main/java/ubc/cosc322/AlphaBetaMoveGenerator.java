@@ -30,9 +30,6 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         GameState rootState = gameState.copy();
         int rootSide = rootState.getSideToMove();
 
-        timer = new Timer();
-        timer.start();
-
         MoveBuffer rootMoves = plyMoveBuffers[0];
         rootMoves.clear();
         generateMoves(rootState, rootSide, rootMoves);
@@ -41,6 +38,24 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
             return null;
         }
 
+        timer = new Timer();
+        timer.start();
+
+        // Age history table: halve all entries to retain relative ordering
+        // while decaying stale data from previous game positions
+        for (int i = 0; i < GameState.BOARD_CELLS; i++) {
+            for (int j = 0; j < GameState.BOARD_CELLS; j++) {
+                history[i][j] >>= 1;
+            }
+        }
+        // Clear killer moves from previous search
+        java.util.Arrays.fill(killerMoveA, 0);
+        java.util.Arrays.fill(killerMoveB, 0);
+
+        int[] previousIterationScores = new int[rootMoves.size];
+        for (int i = 0; i < previousIterationScores.length; i++) {
+            previousIterationScores[i] = 0;
+        }
         int bestFrom = rootMoves.from[0];
         int bestTo = rootMoves.to[0];
         int bestArrow = rootMoves.arrow[0];
@@ -105,6 +120,9 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         int sideToMove = state.getSideToMove();
 
         if (depth <= 0) {
+            if (!hasAnyLegalMove(state, sideToMove)) {
+                return -MATE_SCORE + ply;
+            }
             return heuristic.evaluate(state, sideToMove);
         }
 
@@ -112,7 +130,9 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         moves.clear();
         generateMoves(state, sideToMove, moves);
 
-        if (moves.size == 0) return -MATE_SCORE + ply;
+        if (moves.size == 0) {
+            return -MATE_SCORE + ply;
+        }
 
         orderMoves(ply, moves);
 

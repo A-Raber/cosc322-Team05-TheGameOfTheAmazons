@@ -31,9 +31,11 @@ public class RelationalTerritorialHeuristic {
         int[] board = state.getBoardRef();
         int opponentSide = opposite(perspectiveSide);
 
+        // --- Two BFS passes for queen-distance maps (unavoidable) ---
         computeQueenDistanceMap(board, perspectiveSide, distMy);
         computeQueenDistanceMap(board, opponentSide, distOpp);
 
+        // --- Territory score from distance maps (single pass over board) ---
         int score = 0;
         for (int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
             if (board[idx] != GameState.EMPTY) {
@@ -49,23 +51,62 @@ public class RelationalTerritorialHeuristic {
             }
         }
 
-        int myMobility = pseudoMobility(board, perspectiveSide);
-        int oppMobility = pseudoMobility(board, opponentSide);
-        score += MOBILITY_WEIGHT * (myMobility - oppMobility);
+        // --- Consolidated queen stats: one pass per side computes
+        //     mobility, trapped count, and low-mobility penalty together ---
+        computeQueenStats(board, perspectiveSide, queenStats);
+        int myMobility       = queenStats[0];
+        int myTrapped         = queenStats[1];
+        int myLowMobPenalty   = queenStats[2];
 
-        int myTrappedQueens = countTrappedQueens(board, perspectiveSide);
-        int oppTrappedQueens = countTrappedQueens(board, opponentSide);
-        score += TRAPPED_QUEEN_WEIGHT * (oppTrappedQueens - myTrappedQueens);
+        computeQueenStats(board, opponentSide, queenStats);
+        int oppMobility       = queenStats[0];
+        int oppTrapped        = queenStats[1];
+        int oppLowMobPenalty  = queenStats[2];
 
-        int myLowMobilityPenalty = lowMobilityPenalty(board, perspectiveSide);
-        int oppLowMobilityPenalty = lowMobilityPenalty(board, opponentSide);
-        score += LOW_MOBILITY_WEIGHT * (oppLowMobilityPenalty - myLowMobilityPenalty);
+        score += MOBILITY_WEIGHT      * (myMobility      - oppMobility);
+        score += TRAPPED_QUEEN_WEIGHT * (oppTrapped       - myTrapped);
+        score += LOW_MOBILITY_WEIGHT  * (oppLowMobPenalty - myLowMobPenalty);
 
         if (state.getSideToMove() == perspectiveSide) {
             score += SIDE_TO_MOVE_BONUS;
         }
 
         return score;
+    }
+
+    // Reusable 3-element array: [0]=totalMobility, [1]=trappedCount, [2]=lowMobilityPenalty
+    private final int[] queenStats = new int[3];
+
+    /**
+     * Single pass over all queens of {@code side}: for each queen, compute
+     * ray-based reachable count (mobility), and derive trapped / low-mobility
+     * penalty from it.  Results written into {@code out[0..2]}.
+     */
+    private void computeQueenStats(int[] board, int side, int[] out) {
+        int totalMobility = 0;
+        int trapped = 0;
+        int lowMobPenalty = 0;
+
+        for (int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
+            if (board[idx] != side) {
+                continue;
+            }
+
+            int mobility = reachableCountFrom(board, idx);
+            totalMobility += mobility;
+
+            if (mobility == 0) {
+                trapped++;
+            } else if (mobility <= 2) {
+                lowMobPenalty += 20;
+            } else if (mobility <= 5) {
+                lowMobPenalty += 8;
+            }
+        }
+
+        out[0] = totalMobility;
+        out[1] = trapped;
+        out[2] = lowMobPenalty;
     }
 
     private void computeQueenDistanceMap(int[] board, int side, int[] dist) {
@@ -107,47 +148,6 @@ public class RelationalTerritorialHeuristic {
         }
     }
 
-    private int pseudoMobility(int[] board, int side) {
-        int mobility = 0;
-        for (int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
-            if (board[idx] != side) {
-                continue;
-            }
-            mobility += reachableCountFrom(board, idx);
-        }
-        return mobility;
-    }
-
-    private int countTrappedQueens(int[] board, int side) {
-        int trapped = 0;
-        for (int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
-            if (board[idx] != side) {
-                continue;
-            }
-            if (!hasAnyReachableSquare(board, idx)) {
-                trapped++;
-            }
-        }
-        return trapped;
-    }
-
-    private int lowMobilityPenalty(int[] board, int side) {
-        int penalty = 0;
-        for (int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
-            if (board[idx] != side) {
-                continue;
-            }
-
-            int mobility = reachableCountFrom(board, idx);
-            if (mobility <= 2) {
-                penalty += 20;
-            } else if (mobility <= 5) {
-                penalty += 8;
-            }
-        }
-        return penalty;
-    }
-
     private int reachableCountFrom(int[] board, int from) {
         int total = 0;
         for (int direction : DIRECTION_OFFSETS) {
@@ -165,19 +165,6 @@ public class RelationalTerritorialHeuristic {
             }
         }
         return total;
-    }
-
-    private boolean hasAnyReachableSquare(int[] board, int from) {
-        for (int direction : DIRECTION_OFFSETS) {
-            int next = from + direction;
-            if (!isInsideBoard(next) || crossesRowBoundary(from, next)) {
-                continue;
-            }
-            if (board[next] == GameState.EMPTY) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static int opposite(int side) {
