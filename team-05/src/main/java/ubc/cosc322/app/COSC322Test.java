@@ -1,8 +1,18 @@
 
-package ubc.cosc322;
+package ubc.cosc322.app;
 
 import java.util.ArrayList;
 import java.util.Map;
+
+import ubc.cosc322.benchmark.MoveGeneratorBenchmark;
+import ubc.cosc322.engine.MoveGenerator;
+import ubc.cosc322.engine.alphabeta.AlphaBetaMoveGenerator;
+import ubc.cosc322.engine.baseline.GreedyMoveGenerator;
+import ubc.cosc322.engine.baseline.HumanMoveGenerator;
+import ubc.cosc322.engine.baseline.RandomMoveGenerator;
+import ubc.cosc322.engine.mcts.v1.MCTS;
+import ubc.cosc322.engine.mcts.v2.MCTSv2;
+import ubc.cosc322.model.GameState;
 
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
@@ -53,7 +63,7 @@ public class COSC322Test extends GamePlayer {
 		// default behavior for Player
 		// now supports greedy, random, mcts, alphabeta, or human (manual)
 		if (args.length < 2) {
-			System.err.println("Usage: COSC322Test <username> <password> [greedy|random|mcts|alphabeta|human]");
+			System.err.println("Usage: COSC322Test <username> <password> [greedy|random|mcts|mctsv2|alphabeta|human]");
 			return;
 		}
 
@@ -64,6 +74,8 @@ public class COSC322Test extends GamePlayer {
 			selectedGen = new RandomMoveGenerator();
 		} else if ("mcts".equalsIgnoreCase(genArg)) {
 			selectedGen = new MCTS();
+		} else if ("mctsv2".equalsIgnoreCase(genArg)) {
+			selectedGen = new MCTSv2();
 		} else if ("alphabeta".equalsIgnoreCase(genArg)) {
 			selectedGen = new AlphaBetaMoveGenerator();
 		} else if ("human".equalsIgnoreCase(genArg)) {

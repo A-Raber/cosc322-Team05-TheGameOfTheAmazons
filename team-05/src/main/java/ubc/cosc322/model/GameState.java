@@ -1,4 +1,4 @@
-package ubc.cosc322;
+package ubc.cosc322.model;
 
 import java.util.List;
 

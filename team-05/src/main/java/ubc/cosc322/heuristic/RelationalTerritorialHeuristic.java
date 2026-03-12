@@ -1,6 +1,8 @@
-package ubc.cosc322;
+package ubc.cosc322.heuristic;
 
 import java.util.Arrays;
+
+import ubc.cosc322.model.GameState;
 
 public class RelationalTerritorialHeuristic {
 

@@ -1,8 +1,11 @@
-package ubc.cosc322;
+package ubc.cosc322.engine.baseline;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Random;
+
+import ubc.cosc322.engine.AbstractMoveGenerator;
+import ubc.cosc322.model.GameState;
 
 
 
@@ -50,3 +53,4 @@ public class RandomMoveGenerator extends AbstractMoveGenerator {
 		return null;
 	}
 }
+

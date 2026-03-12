@@ -1,6 +1,11 @@
-package ubc.cosc322;
+package ubc.cosc322.engine.alphabeta;
 
 import java.util.ArrayList;
+
+import ubc.cosc322.engine.AbstractMoveGenerator;
+import ubc.cosc322.heuristic.RelationalTerritorialHeuristic;
+import ubc.cosc322.model.GameState;
+import ubc.cosc322.util.Timer;
 
 public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
 
@@ -375,3 +380,4 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         }
     }
 }
+

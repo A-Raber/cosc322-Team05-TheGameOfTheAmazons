@@ -1,4 +1,11 @@
-package ubc.cosc322;
+package ubc.cosc322.benchmark;
+
+import ubc.cosc322.engine.MoveGenerator;
+import ubc.cosc322.engine.alphabeta.AlphaBetaMoveGenerator;
+import ubc.cosc322.engine.baseline.GreedyMoveGenerator;
+import ubc.cosc322.engine.baseline.RandomMoveGenerator;
+import ubc.cosc322.engine.mcts.v1.MCTS;
+import ubc.cosc322.model.GameState;
 
 public class MoveGeneratorBenchmark {
 

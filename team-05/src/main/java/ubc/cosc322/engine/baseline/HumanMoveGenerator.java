@@ -1,7 +1,10 @@
-package ubc.cosc322;
+package ubc.cosc322.engine.baseline;
 
 import java.util.ArrayList;
 import java.util.Scanner;
+
+import ubc.cosc322.engine.AbstractMoveGenerator;
+import ubc.cosc322.model.GameState;
 
 // A class which allows the human running to program to choose their move
 
@@ -97,3 +100,4 @@ public class HumanMoveGenerator extends AbstractMoveGenerator {
         return (row-1) * GameState.BOARD_SIZE + (col-1);
     }
 }
+

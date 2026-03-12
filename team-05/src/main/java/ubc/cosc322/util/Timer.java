@@ -1,4 +1,4 @@
-package ubc.cosc322;
+package ubc.cosc322.util;
 
 /*
     Utility timer used to enfoce a time limit during seach algorithms

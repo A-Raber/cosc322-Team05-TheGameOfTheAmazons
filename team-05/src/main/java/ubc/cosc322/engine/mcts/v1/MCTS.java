@@ -1,6 +1,11 @@
-package ubc.cosc322;
+package ubc.cosc322.engine.mcts.v1;
 
 import java.util.*;
+
+import ubc.cosc322.engine.AbstractMoveGenerator;
+import ubc.cosc322.model.GameState;
+import ubc.cosc322.model.Move;
+import ubc.cosc322.util.Timer;
 
 // Helper methods and direction constants are inherited from AbstractMoveGenerator
 public class MCTS extends AbstractMoveGenerator {
@@ -225,3 +230,4 @@ public class MCTS extends AbstractMoveGenerator {
         };
     }
 }
+
