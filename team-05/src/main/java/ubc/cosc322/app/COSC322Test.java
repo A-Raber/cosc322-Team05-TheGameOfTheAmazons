@@ -10,6 +10,7 @@ import ubc.cosc322.engine.alphabeta.AlphaBetaMoveGenerator;
 import ubc.cosc322.engine.baseline.GreedyMoveGenerator;
 import ubc.cosc322.engine.baseline.HumanMoveGenerator;
 import ubc.cosc322.engine.baseline.RandomMoveGenerator;
+import ubc.cosc322.engine.hybrid.HybridOpeningMctsAlphaBetaGenerator;
 import ubc.cosc322.engine.mcts.v1.MCTS;
 import ubc.cosc322.engine.mcts.v2.MCTSv2;
 import ubc.cosc322.model.GameState;
@@ -61,16 +62,18 @@ public class COSC322Test extends GamePlayer {
 		
 
 		// default behavior for Player
-		// now supports greedy, random, mcts, alphabeta, or human (manual)
+		// now supports greedy, random, mcts, mctsv2, hybrid, alphabeta, or human (manual)
 		if (args.length < 2) {
-			System.err.println("Usage: COSC322Test <username> <password> [greedy|random|mcts|mctsv2|alphabeta|human]");
+			System.err.println("Usage: COSC322Test <username> <password> [hybrid|greedy|random|mcts|mctsv2|alphabeta|human]");
 			return;
 		}
 
-		// optional third argument selects the move generator (default: greedy)
-		String genArg = args.length >= 3 ? args[2] : "greedy";
+		// optional third argument selects the move generator (default: hybrid)
+		String genArg = args.length >= 3 ? args[2] : "hybrid";
 		MoveGenerator selectedGen;
-		if ("random".equalsIgnoreCase(genArg)) {
+		if ("hybrid".equalsIgnoreCase(genArg)) {
+			selectedGen = new HybridOpeningMctsAlphaBetaGenerator();
+		} else if ("random".equalsIgnoreCase(genArg)) {
 			selectedGen = new RandomMoveGenerator();
 		} else if ("mcts".equalsIgnoreCase(genArg)) {
 			selectedGen = new MCTS();

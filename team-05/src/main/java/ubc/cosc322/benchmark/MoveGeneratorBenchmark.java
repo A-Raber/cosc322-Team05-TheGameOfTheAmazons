@@ -4,7 +4,9 @@ import ubc.cosc322.engine.MoveGenerator;
 import ubc.cosc322.engine.alphabeta.AlphaBetaMoveGenerator;
 import ubc.cosc322.engine.baseline.GreedyMoveGenerator;
 import ubc.cosc322.engine.baseline.RandomMoveGenerator;
+import ubc.cosc322.engine.hybrid.HybridOpeningMctsAlphaBetaGenerator;
 import ubc.cosc322.engine.mcts.v1.MCTS;
+import ubc.cosc322.engine.mcts.v2.MCTSv2;
 import ubc.cosc322.model.GameState;
 
 public class MoveGeneratorBenchmark {
@@ -30,6 +32,8 @@ public class MoveGeneratorBenchmark {
             new RandomMoveGenerator(),
             new GreedyMoveGenerator(),
             new MCTS(250_000),
+            new MCTSv2(300_000),
+            new HybridOpeningMctsAlphaBetaGenerator(),
             new AlphaBetaMoveGenerator()
         };
 
