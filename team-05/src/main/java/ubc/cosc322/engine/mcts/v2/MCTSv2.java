@@ -10,7 +10,6 @@ import ubc.cosc322.engine.AbstractMoveGenerator;
 import ubc.cosc322.heuristic.PhaseAwareHeuristic;
 import ubc.cosc322.model.GameState;
 import ubc.cosc322.model.Move;
-import ubc.cosc322.util.Timer;
 
 /**
  * MCTSv2 is memory-optimized to v1:
@@ -35,15 +34,28 @@ public class MCTSv2 extends AbstractMoveGenerator {
 
     private static final double PLAYOUT_RANDOM_MOVE_RATE = 0.30;
     private static final int PLAYOUT_TACTICAL_SAMPLE_SIZE = 20;
+    private static final long MAIN_SEARCH_TIME_BUDGET_MS = 27_000L;
+    private static final long PONDER_TIME_BUDGET_MS = 27_000L;
+    private static final int PONDER_OPPONENT_CANDIDATE_CAP = 64;
+    private static final int PONDER_BRANCH_COUNT = 3;
+    private static final long PONDER_MIN_BRANCH_TIME_MS = 3_500L;
+    private static final int PONDER_REFINEMENT_TOP = 14;
+    private static final int TACTICAL_WIN_CHECK_CAP = 96;
+    private static final int BLUNDER_GUARD_RESPONSE_CHECK_CAP = 72;
+    private static final double FORMATION_WEIGHT_OPENING = 1.55;
+    private static final double FORMATION_WEIGHT_MIDGAME = 0.90;
 
     private final Random random = new Random();
     private final PhaseAwareHeuristic heuristic = new PhaseAwareHeuristic();
 
     private final int maxNodes;
-    private int nodeCount;
-    private boolean warnedNodeCap;
     private int lastMovedQueenBlack = -1;
     private int lastMovedQueenWhite = -1;
+    private volatile Thread ponderThread;
+    private volatile long ponderGeneration;
+    private volatile List<PonderResult> completedPonders = new ArrayList<>();
+    private volatile Move matchedPonderMove;
+    private volatile long matchedPonderStateHash;
 
     public MCTSv2() {
         this(DEFAULT_MAX_NODES);
@@ -80,22 +92,147 @@ public class MCTSv2 extends AbstractMoveGenerator {
         }
     }
 
+    private static final class PonderResult {
+        final long generation;
+        final Move predictedOpponentMove;
+        final Move bestResponse;
+        final long responseStateHash;
+        final double predictionWeight;
+
+        PonderResult(long generation, Move predictedOpponentMove, Move bestResponse, long responseStateHash,
+                double predictionWeight) {
+            this.generation = generation;
+            this.predictedOpponentMove = predictedOpponentMove;
+            this.bestResponse = bestResponse;
+            this.responseStateHash = responseStateHash;
+            this.predictionWeight = predictionWeight;
+        }
+    }
+
+    private static final class PredictedBranch {
+        final Move move;
+        final double weight;
+
+        PredictedBranch(Move move, double weight) {
+            this.move = move;
+            this.weight = Math.max(0.001, weight);
+        }
+    }
+
     @Override
     @SuppressWarnings("unchecked")
     public ArrayList<Integer>[] generateMove(GameState gameState) {
-        Timer timer = new Timer();
-        timer.start();
+        requestStopPondering();
+
+        Move bestMove = consumeMatchedPonderMove(gameState);
+        int rootPlayer = gameState.getSideToMove();
+        if (bestMove == null) {
+            bestMove = chooseMoveInternal(gameState, true, MAIN_SEARCH_TIME_BUDGET_MS);
+        } else {
+            System.out.println("Predicted");
+            rememberMovedQueen(rootPlayer, bestMove.to);
+        }
+
+        if (bestMove != null && !isValidMove(bestMove)) {
+            System.err.println("Warning: MCTSv2 produced invalid move indices, using random legal fallback: "
+                    + bestMove.from + " -> " + bestMove.to + " arrow " + bestMove.arrow);
+            bestMove = pickRandomLegalMoveReservoir(gameState);
+        }
+
+        if (bestMove == null) {
+            return null;
+        }
+
+        return new ArrayList[] {
+                toServerPosition(bestMove.from),
+                toServerPosition(bestMove.to),
+                toServerPosition(bestMove.arrow)
+        };
+    }
+
+    @Override
+    public void onOwnMovePlayed(GameState stateAfterOwnMove, Move ownMove) {
+        if (stateAfterOwnMove == null || ownMove == null) {
+            return;
+        }
+        startPondering(stateAfterOwnMove);
+    }
+
+    @Override
+    public void onOpponentMoveObserved(GameState stateBeforeOpponentMove, Move opponentMove) {
+        requestStopPondering();
+
+        matchedPonderMove = null;
+        matchedPonderStateHash = 0L;
+
+        if (stateBeforeOpponentMove == null || opponentMove == null) {
+            completedPonders = new ArrayList<>();
+            return;
+        }
+
+        List<PonderResult> results = completedPonders;
+        completedPonders = new ArrayList<>();
+        if (results == null || results.isEmpty()) {
+            return;
+        }
+
+        GameState afterOpponentMove = stateBeforeOpponentMove.copy();
+        applyMove(afterOpponentMove, opponentMove);
+        long actualHash = computeStateHash(afterOpponentMove);
+
+        PonderResult matched = null;
+        for (PonderResult result : results) {
+            if (!sameMove(result.predictedOpponentMove, opponentMove)) {
+                continue;
+            }
+            if (actualHash != result.responseStateHash) {
+                continue;
+            }
+            if (matched == null || result.predictionWeight > matched.predictionWeight) {
+                matched = result;
+            }
+        }
+
+        if (matched != null) {
+            matchedPonderMove = matched.bestResponse;
+            matchedPonderStateHash = actualHash;
+        }
+    }
+
+    @Override
+    public void shutdown() {
+        requestStopPondering();
+        completedPonders = new ArrayList<>();
+        matchedPonderMove = null;
+        matchedPonderStateHash = 0L;
+    }
+
+    private Move chooseMoveInternal(GameState gameState, boolean rememberMoveMemory, long timeBudgetMs) {
+        long endTime = System.currentTimeMillis() + Math.max(1L, timeBudgetMs);
+
+        int rootPlayer = gameState.getSideToMove();
+
+        // Tactical shortcut: if we can end the game immediately, play that move.
+        Move immediateWin = findImmediateWinningMove(gameState, rootPlayer, TACTICAL_WIN_CHECK_CAP);
+        if (immediateWin != null) {
+            if (rememberMoveMemory) {
+                rememberMovedQueen(rootPlayer, immediateWin.to);
+            }
+            return immediateWin;
+        }
 
         Node root = new Node(null, 0.5);
-        int rootPlayer = gameState.getSideToMove();
         int rootPly = countArrows(gameState.getBoardRef());
         boolean openingPhase = rootPly < OPENING_PLY_THRESHOLD;
 
-        nodeCount = 1;
-        warnedNodeCap = false;
+        int nodeCount = 1;
+        boolean warnedNodeCap = false;
         int iterations = 0;
 
-        while (!timer.timeUp() && iterations < MAX_ITERATIONS && nodeCount < maxNodes) {
+        while (System.currentTimeMillis() < endTime && iterations < MAX_ITERATIONS && nodeCount < maxNodes) {
+            if (Thread.currentThread().isInterrupted()) {
+                break;
+            }
             GameState rolloutState = gameState.copy();
             ArrayList<Node> path = new ArrayList<>(32);
             Node node = root;
@@ -118,7 +255,10 @@ public class MCTSv2 extends AbstractMoveGenerator {
             // 2) Expansion: add a single child lazily.
             if (canExpandHere(node)) {
                 if (nodeCount >= maxNodes) {
-                    warnNodeCap();
+                    if (!warnedNodeCap) {
+                        System.err.println("Warning: MCTSv2 node cap reached (" + maxNodes + ")");
+                        warnedNodeCap = true;
+                    }
                 } else {
                     ScoredMove selected = removeBiasedTopMove(node.unexpandedMoves);
                     Node child = new Node(selected.move, selected.prior);
@@ -148,12 +288,173 @@ public class MCTSv2 extends AbstractMoveGenerator {
         }
 
         Move bestMove = bestChild.moveFromParent;
-        rememberMovedQueen(rootPlayer, bestMove.to);
-        return new ArrayList[] {
-                toServerPosition(bestMove.from),
-                toServerPosition(bestMove.to),
-                toServerPosition(bestMove.arrow)
-        };
+        if (rememberMoveMemory) {
+            rememberMovedQueen(rootPlayer, bestMove.to);
+        }
+        return bestMove;
+    }
+
+    private void startPondering(GameState stateAfterOwnMove) {
+        requestStopPondering();
+        completedPonders = new ArrayList<>();
+        matchedPonderMove = null;
+        matchedPonderStateHash = 0L;
+
+        final long generation = ++ponderGeneration;
+        final GameState ponderRoot = stateAfterOwnMove.copy();
+        Thread worker = new Thread(() -> runPonderingTask(ponderRoot, generation), "MCTSv2-Ponder");
+        worker.setDaemon(true);
+        ponderThread = worker;
+        worker.start();
+    }
+
+    private void runPonderingTask(GameState stateAfterOwnMove, long generation) {
+        if (Thread.currentThread().isInterrupted()) {
+            return;
+        }
+
+        List<PredictedBranch> branches = predictLikelyOpponentMoves(stateAfterOwnMove);
+        if (branches.isEmpty() || Thread.currentThread().isInterrupted()) {
+            return;
+        }
+
+        double totalWeight = 0.0;
+        for (PredictedBranch branch : branches) {
+            totalWeight += branch.weight;
+        }
+        long remainingMs = PONDER_TIME_BUDGET_MS;
+        ArrayList<PonderResult> computed = new ArrayList<>(branches.size());
+
+        for (int i = 0; i < branches.size(); i++) {
+            if (Thread.currentThread().isInterrupted() || generation != ponderGeneration || remainingMs <= 0) {
+                break;
+            }
+
+            PredictedBranch branch = branches.get(i);
+            long branchBudget;
+            if (i == branches.size() - 1) {
+                branchBudget = remainingMs;
+            } else {
+                double fraction = branch.weight / Math.max(0.001, totalWeight);
+                long weighted = Math.round(PONDER_TIME_BUDGET_MS * fraction);
+                branchBudget = Math.max(PONDER_MIN_BRANCH_TIME_MS, weighted);
+                branchBudget = Math.min(branchBudget, remainingMs);
+            }
+
+            GameState responseState = stateAfterOwnMove.copy();
+            applyMove(responseState, branch.move);
+            long responseStateHash = computeStateHash(responseState);
+            Move bestResponse = chooseMoveInternal(responseState, false, branchBudget);
+            if (bestResponse != null && !Thread.currentThread().isInterrupted()) {
+                computed.add(new PonderResult(generation, branch.move, bestResponse, responseStateHash, branch.weight));
+                completedPonders = new ArrayList<>(computed);
+            }
+
+            remainingMs -= branchBudget;
+            totalWeight -= branch.weight;
+        }
+
+        if (generation == ponderGeneration && !computed.isEmpty()) {
+            completedPonders = new ArrayList<>(computed);
+        }
+    }
+
+    private List<PredictedBranch> predictLikelyOpponentMoves(GameState state) {
+        int sideToMove = state.getSideToMove();
+
+        // If opponent has an immediate win, predict that first.
+        Move tacticalWin = findImmediateWinningMove(state, sideToMove, TACTICAL_WIN_CHECK_CAP);
+        if (tacticalWin != null) {
+            ArrayList<PredictedBranch> forced = new ArrayList<>(1);
+            forced.add(new PredictedBranch(tacticalWin, 1.0));
+            return forced;
+        }
+
+        List<ScoredMove> candidates = generateCandidateMoves(state, PONDER_OPPONENT_CANDIDATE_CAP);
+        if (candidates.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        int evalTop = Math.min(PONDER_REFINEMENT_TOP, candidates.size());
+        ArrayList<ScoredMove> refined = new ArrayList<>(evalTop);
+
+        for (int i = 0; i < evalTop; i++) {
+            ScoredMove candidate = candidates.get(i);
+            int movingPiece = doMove(state, candidate.move);
+            double tactical = evaluateForSide(state, sideToMove);
+            state.undoMove(candidate.move.from, candidate.move.to, candidate.move.arrow, movingPiece);
+
+            double blend = candidate.score + 0.020 * tactical;
+            refined.add(new ScoredMove(candidate.move, blend));
+        }
+
+        refined.sort((a, b) -> Double.compare(b.score, a.score));
+        int branchCount = Math.min(PONDER_BRANCH_COUNT, refined.size());
+        ArrayList<PredictedBranch> branches = new ArrayList<>(branchCount);
+        for (int i = 0; i < branchCount; i++) {
+            ScoredMove pick = refined.get(i);
+            branches.add(new PredictedBranch(pick.move, pick.prior));
+        }
+        return branches;
+    }
+
+    private Move findImmediateWinningMove(GameState state, int movingSide, int candidateCap) {
+        List<ScoredMove> candidates = generateCandidateMoves(state, candidateCap);
+        int opponent = opposite(movingSide);
+        for (ScoredMove candidate : candidates) {
+            if (Thread.currentThread().isInterrupted()) {
+                return null;
+            }
+
+            Move move = candidate.move;
+            int movingPiece = doMove(state, move);
+            boolean opponentHasMove = hasAnyLegalMove(state, opponent);
+            state.undoMove(move.from, move.to, move.arrow, movingPiece);
+
+            if (!opponentHasMove) {
+                return move;
+            }
+        }
+        return null;
+    }
+
+    private Move consumeMatchedPonderMove(GameState gameState) {
+        Move cached = matchedPonderMove;
+        if (cached == null) {
+            return null;
+        }
+        long expectedHash = matchedPonderStateHash;
+        matchedPonderMove = null;
+        matchedPonderStateHash = 0L;
+
+        long actualHash = computeStateHash(gameState);
+        if (actualHash != expectedHash) {
+            return null;
+        }
+        return cached;
+    }
+
+    private void requestStopPondering() {
+        Thread worker = ponderThread;
+        if (worker != null) {
+            worker.interrupt();
+        }
+        ponderThread = null;
+    }
+
+    private static boolean sameMove(Move a, Move b) {
+        return a != null && b != null && a.from == b.from && a.to == b.to && a.arrow == b.arrow;
+    }
+
+    private static long computeStateHash(GameState state) {
+        int[] board = state.getBoardRef();
+        long h = 0x9E3779B97F4A7C15L;
+        for (int i = 0; i < board.length; i++) {
+            long v = (long) (board[i] + 1) * (i + 0x100L);
+            h ^= v + 0x9E3779B97F4A7C15L + (h << 6) + (h >>> 2);
+        }
+        h ^= (state.getSideToMove() * 0xBF58476D1CE4E5B9L);
+        return h;
     }
 
     private Node selectBestRootChild(Node root, GameState state, boolean openingPhase, int ply) {
@@ -161,37 +462,62 @@ public class MCTSv2 extends AbstractMoveGenerator {
             return null;
         }
 
-        if (!openingPhase) {
-            return root.children.stream().max(Comparator.comparingDouble(this::finalMoveScore)).orElse(null);
-        }
-
         int side = state.getSideToMove();
         int lastQueen = lastMovedQueenForSide(side);
         boolean hasDevelopingChild = root.children.stream().anyMatch(n -> isStrongOpeningMove(n.moveFromParent, side));
+        int[] board = state.getBoardRef();
 
+        GameState rootScratch = state.copy();
+
+        Node bestSafe = null;
+        double bestSafeScore = Double.NEGATIVE_INFINITY;
         Node best = null;
         double bestScore = Double.NEGATIVE_INFINITY;
         for (Node child : root.children) {
             Move move = child.moveFromParent;
             double score = finalMoveScore(child);
 
-            if (hasDevelopingChild && !isStrongOpeningMove(move, side)) {
-                score -= 0.8;
-            }
-            if (move != null && move.from == lastQueen) {
-                score -= 0.5;
-            }
-            if (move != null) {
-                score += openingMoveBonus(move, side, ply);
+            if (openingPhase) {
+                if (hasDevelopingChild && !isStrongOpeningMove(move, side)) {
+                    score -= 0.8;
+                }
+                if (move != null && move.from == lastQueen) {
+                    score -= 0.5;
+                }
+                if (move != null) {
+                    score += openingMoveBonus(move, side, ply);
+                    score += FORMATION_WEIGHT_OPENING * localFormationAfterMove(board, side, move.from, move.to);
+                }
+            } else if (move != null) {
+                score += FORMATION_WEIGHT_MIDGAME * localFormationAfterMove(board, side, move.from, move.to);
             }
 
             if (score > bestScore) {
                 bestScore = score;
                 best = child;
             }
+
+            if (move == null) {
+                continue;
+            }
+            if (allowsImmediateOpponentWin(rootScratch, move)) {
+                continue;
+            }
+            if (score > bestSafeScore) {
+                bestSafeScore = score;
+                bestSafe = child;
+            }
         }
 
-        return best;
+        return bestSafe != null ? bestSafe : best;
+    }
+
+    private boolean allowsImmediateOpponentWin(GameState state, Move move) {
+        int movingPiece = doMove(state, move);
+        int opponentSide = state.getSideToMove();
+        Move opponentWinningReply = findImmediateWinningMove(state, opponentSide, BLUNDER_GUARD_RESPONSE_CHECK_CAP);
+        state.undoMove(move.from, move.to, move.arrow, movingPiece);
+        return opponentWinningReply != null;
     }
 
     private boolean canExpandHere(Node node) {
@@ -297,13 +623,17 @@ public class MCTSv2 extends AbstractMoveGenerator {
         for (Move move : sample) {
             int movingPiece = doMove(state, move);
             double score = evaluateForSide(state, moverSide);
+            double formation = localFormationAt(state.getBoardRef(), moverSide, move.to);
             state.undoMove(move.from, move.to, move.arrow, movingPiece);
 
             if (openingPhase) {
                 score += openingMoveBonus(move, moverSide, ply);
+                score += 70.0 * formation;
                 if (move.from == lastQueen) {
                     score -= 55.0;
                 }
+            } else {
+                score += 36.0 * formation;
             }
 
             if (score > bestScore) {
@@ -407,6 +737,7 @@ public class MCTSv2 extends AbstractMoveGenerator {
                     int arrow = arrowSample[i];
                     Move move = new Move(queenPos, destination, arrow);
                     double score = quickMoveScore(
+                            board,
                             sideToMove,
                             queenPos,
                             destination,
@@ -459,6 +790,7 @@ public class MCTSv2 extends AbstractMoveGenerator {
     }
 
     private double quickMoveScore(
+            int[] board,
             int sideToMove,
             int from,
             int destination,
@@ -470,9 +802,11 @@ public class MCTSv2 extends AbstractMoveGenerator {
         int territoryGain = mobilityAfter - mobilityBefore;
         int centerProgress = manhattanFromCenter(from) - manhattanFromCenter(destination);
         int forwardProgress = rowProgress(sideToMove, from, destination);
+        double formation = localFormationAfterMove(board, sideToMove, from, destination);
 
         double centerPenaltyDest = manhattanFromCenter(destination);
         double centerPenaltyArrow = manhattanFromCenter(arrow);
+        double formationWeight = ply < OPENING_PLY_THRESHOLD ? FORMATION_WEIGHT_OPENING : FORMATION_WEIGHT_MIDGAME;
         double base = 1.50 * mobilityAfter
                 + 0.42 * territoryGain
                 + 0.70 * centerProgress
@@ -480,6 +814,7 @@ public class MCTSv2 extends AbstractMoveGenerator {
                 + 0.15 * arrowFanout
                 - 0.18 * centerPenaltyDest
                 - 0.08 * centerPenaltyArrow
+            + formationWeight * formation
                 + random.nextDouble() * 0.01;
 
         if (ply < OPENING_PLY_THRESHOLD) {
@@ -506,6 +841,10 @@ public class MCTSv2 extends AbstractMoveGenerator {
     }
 
     private int doMove(GameState state, Move move) {
+        if (!isValidMove(move)) {
+            throw new IllegalArgumentException("Invalid move indices: "
+                    + move.from + " -> " + move.to + " arrow " + move.arrow);
+        }
         int[] board = state.getBoardRef();
         int movingPiece = board[move.from];
         board[move.from] = GameState.EMPTY;
@@ -513,6 +852,14 @@ public class MCTSv2 extends AbstractMoveGenerator {
         board[move.arrow] = GameState.ARROW;
         state.setSideToMove(opposite(state.getSideToMove()));
         return movingPiece;
+    }
+
+    private static boolean isValidMove(Move move) {
+        return move != null && isValidIndex(move.from) && isValidIndex(move.to) && isValidIndex(move.arrow);
+    }
+
+    private static boolean isValidIndex(int idx) {
+        return idx >= 0 && idx < GameState.BOARD_CELLS;
     }
 
     private static int manhattanFromCenter(int index) {
@@ -530,9 +877,99 @@ public class MCTSv2 extends AbstractMoveGenerator {
         return fromRow - toRow;
     }
 
+    private double localFormationAfterMove(int[] board, int side, int from, int to) {
+        int toRow = to / GameState.BOARD_SIZE;
+        int toCol = to % GameState.BOARD_SIZE;
+
+        int adjacentFriendlies = 0;
+        int nearbyFriendlies = 0;
+        int minDistance = Integer.MAX_VALUE;
+
+        for (int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
+            if (idx == from || board[idx] != side) {
+                continue;
+            }
+
+            int row = idx / GameState.BOARD_SIZE;
+            int col = idx % GameState.BOARD_SIZE;
+            int dr = Math.abs(toRow - row);
+            int dc = Math.abs(toCol - col);
+            int chebyshev = Math.max(dr, dc);
+            int manhattan = dr + dc;
+
+            if (chebyshev <= 1) {
+                adjacentFriendlies++;
+            }
+            if (manhattan <= 3) {
+                nearbyFriendlies++;
+            }
+            if (manhattan < minDistance) {
+                minDistance = manhattan;
+            }
+        }
+
+        return formationScoreFromDistances(adjacentFriendlies, nearbyFriendlies, minDistance);
+    }
+
+    private double localFormationAt(int[] board, int side, int queenPos) {
+        int qRow = queenPos / GameState.BOARD_SIZE;
+        int qCol = queenPos % GameState.BOARD_SIZE;
+
+        int adjacentFriendlies = 0;
+        int nearbyFriendlies = 0;
+        int minDistance = Integer.MAX_VALUE;
+
+        for (int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
+            if (idx == queenPos || board[idx] != side) {
+                continue;
+            }
+
+            int row = idx / GameState.BOARD_SIZE;
+            int col = idx % GameState.BOARD_SIZE;
+            int dr = Math.abs(qRow - row);
+            int dc = Math.abs(qCol - col);
+            int chebyshev = Math.max(dr, dc);
+            int manhattan = dr + dc;
+
+            if (chebyshev <= 1) {
+                adjacentFriendlies++;
+            }
+            if (manhattan <= 3) {
+                nearbyFriendlies++;
+            }
+            if (manhattan < minDistance) {
+                minDistance = manhattan;
+            }
+        }
+
+        return formationScoreFromDistances(adjacentFriendlies, nearbyFriendlies, minDistance);
+    }
+
+    private double formationScoreFromDistances(int adjacentFriendlies, int nearbyFriendlies, int minDistance) {
+        double score = 0.0;
+
+        score -= 2.80 * adjacentFriendlies;
+        score -= 0.90 * Math.max(0, nearbyFriendlies - adjacentFriendlies);
+
+        if (minDistance == Integer.MAX_VALUE) {
+            return score;
+        }
+
+        if (minDistance <= 1) {
+            score -= 2.0;
+        } else if (minDistance == 2) {
+            score -= 0.8;
+        } else if (minDistance <= 4) {
+            score += 1.0;
+        } else if (minDistance <= 6) {
+            score += 0.4;
+        }
+
+        return score;
+    }
+
     private int evaluateForSide(GameState state, int side) {
-        int opp = opposite(side);
-        return heuristic.evaluate(state, side) - heuristic.evaluate(state, opp);
+        return heuristic.evaluate(state, side);
     }
 
     private double openingMoveBonus(Move move, int side, int ply) {
@@ -628,13 +1065,6 @@ public class MCTSv2 extends AbstractMoveGenerator {
 
     private void applyMove(GameState state, Move move) {
         state.applyMove(move);
-    }
-
-    private void warnNodeCap() {
-        if (!warnedNodeCap) {
-            System.err.println("Warning: MCTSv2 node cap reached (" + maxNodes + ")");
-            warnedNodeCap = true;
-        }
     }
 
     private static int opposite(int side) {

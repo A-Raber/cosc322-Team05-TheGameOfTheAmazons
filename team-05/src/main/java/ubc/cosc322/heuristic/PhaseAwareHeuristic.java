@@ -10,32 +10,45 @@ import ubc.cosc322.model.GameState;
  */
 public class PhaseAwareHeuristic {
 
-    private static final int TERRITORY_WEIGHT = 3;
-    private static final int MOBILITY_WEIGHT = 7;
-    private static final int TRAP_WEIGHT = 140;
-    private static final int LOW_MOBILITY_WEIGHT = 28;
-    private static final int CENTER_WEIGHT = 2;
     private static final int SIDE_TO_MOVE_BONUS = 10;
+    private static final int ENDGAME_PHASE_ARROWS = 56;
 
     private final RelationalTerritorialHeuristic relational = new RelationalTerritorialHeuristic();
-    private final int[] myStats = new int[4];
-    private final int[] oppStats = new int[4];
+    private final ThreadLocal<int[]> myStatsLocal = ThreadLocal.withInitial(() -> new int[7]);
+    private final ThreadLocal<int[]> oppStatsLocal = ThreadLocal.withInitial(() -> new int[7]);
+    private final ThreadLocal<int[]> queenPosBufferLocal = ThreadLocal.withInitial(() -> new int[4]);
 
     public int evaluate(GameState state, int perspectiveSide) {
         int[] board = state.getBoardRef();
         int opponentSide = opposite(perspectiveSide);
+        double phase = gamePhase(board);
+        int[] myStats = myStatsLocal.get();
+        int[] oppStats = oppStatsLocal.get();
+        int[] queenPosBuffer = queenPosBufferLocal.get();
 
-        computeQueenStats(board, perspectiveSide, myStats);
-        computeQueenStats(board, opponentSide, oppStats);
+        computeQueenStats(board, perspectiveSide, myStats, queenPosBuffer);
+        computeQueenStats(board, opponentSide, oppStats, queenPosBuffer);
 
         int territoryScore = relational.evaluate(state, perspectiveSide);
 
+        int territoryWeight = lerp(2, 4, phase);
+        int mobilityWeight = lerp(8, 6, phase);
+        int trapWeight = lerp(95, 185, phase);
+        int lowMobilityWeight = lerp(18, 42, phase);
+        int centerWeight = lerp(4, 1, phase);
+        int libertiesWeight = lerp(3, 12, phase);
+        int minimumMobilityWeight = lerp(8, 24, phase);
+        int spreadWeight = lerp(6, 1, phase);
+
         int score = 0;
-        score += TERRITORY_WEIGHT * territoryScore;
-        score += MOBILITY_WEIGHT * (myStats[0] - oppStats[0]);
-        score += TRAP_WEIGHT * (oppStats[1] - myStats[1]);
-        score += LOW_MOBILITY_WEIGHT * (oppStats[2] - myStats[2]);
-        score += CENTER_WEIGHT * (oppStats[3] - myStats[3]);
+        score += territoryWeight * territoryScore;
+        score += mobilityWeight * (myStats[0] - oppStats[0]);
+        score += trapWeight * (oppStats[1] - myStats[1]);
+        score += lowMobilityWeight * (oppStats[2] - myStats[2]);
+        score += centerWeight * (oppStats[3] - myStats[3]);
+        score += libertiesWeight * (myStats[4] - oppStats[4]);
+        score += minimumMobilityWeight * (myStats[5] - oppStats[5]);
+        score += spreadWeight * (myStats[6] - oppStats[6]);
 
         if (state.getSideToMove() == perspectiveSide) {
             score += SIDE_TO_MOVE_BONUS;
@@ -44,12 +57,17 @@ public class PhaseAwareHeuristic {
         return score;
     }
 
-    // out[0] mobility, out[1] trapped queens, out[2] low-mobility penalty, out[3] center-distance sum
-    private void computeQueenStats(int[] board, int side, int[] out) {
+    // out[0] mobility, out[1] trapped queens, out[2] low-mobility penalty,
+    // out[3] center-distance sum, out[4] adjacent liberties,
+    // out[5] minimum queen mobility, out[6] queen spread
+    private void computeQueenStats(int[] board, int side, int[] out, int[] queenPosBuffer) {
         int mobility = 0;
         int trapped = 0;
         int lowMobilityPenalty = 0;
         int centerDistance = 0;
+        int adjacentLiberties = 0;
+        int minMobility = Integer.MAX_VALUE;
+        int queenCount = 0;
 
         for (int idx = 0; idx < GameState.BOARD_CELLS; idx++) {
             if (board[idx] != side) {
@@ -59,6 +77,12 @@ public class PhaseAwareHeuristic {
             int queenMobility = reachableCountFrom(board, idx);
             mobility += queenMobility;
             centerDistance += manhattanFromCenter(idx);
+            adjacentLiberties += adjacentEmptyCount(board, idx);
+            minMobility = Math.min(minMobility, queenMobility);
+            if (queenCount < queenPosBuffer.length) {
+                queenPosBuffer[queenCount] = idx;
+            }
+            queenCount++;
 
             if (queenMobility == 0) {
                 trapped++;
@@ -73,6 +97,62 @@ public class PhaseAwareHeuristic {
         out[1] = trapped;
         out[2] = lowMobilityPenalty;
         out[3] = centerDistance;
+        out[4] = adjacentLiberties;
+        out[5] = (queenCount == 0 || minMobility == Integer.MAX_VALUE) ? 0 : minMobility;
+        out[6] = pairwiseQueenSpread(queenPosBuffer, Math.min(queenCount, queenPosBuffer.length));
+    }
+
+    private int adjacentEmptyCount(int[] board, int from) {
+        int row = from / GameState.BOARD_SIZE;
+        int col = from % GameState.BOARD_SIZE;
+        int empties = 0;
+        for (int dRow = -1; dRow <= 1; dRow++) {
+            for (int dCol = -1; dCol <= 1; dCol++) {
+                if (dRow == 0 && dCol == 0) {
+                    continue;
+                }
+                int nr = row + dRow;
+                int nc = col + dCol;
+                if (nr < 0 || nr >= GameState.BOARD_SIZE || nc < 0 || nc >= GameState.BOARD_SIZE) {
+                    continue;
+                }
+                int next = nr * GameState.BOARD_SIZE + nc;
+                if (board[next] == GameState.EMPTY) {
+                    empties++;
+                }
+            }
+        }
+        return empties;
+    }
+
+    private int pairwiseQueenSpread(int[] queenPositions, int queenCount) {
+        int spread = 0;
+        for (int i = 0; i < queenCount; i++) {
+            int a = queenPositions[i];
+            int aRow = a / GameState.BOARD_SIZE;
+            int aCol = a % GameState.BOARD_SIZE;
+            for (int j = i + 1; j < queenCount; j++) {
+                int b = queenPositions[j];
+                int bRow = b / GameState.BOARD_SIZE;
+                int bCol = b % GameState.BOARD_SIZE;
+                spread += Math.abs(aRow - bRow) + Math.abs(aCol - bCol);
+            }
+        }
+        return spread;
+    }
+
+    private static double gamePhase(int[] board) {
+        int arrows = 0;
+        for (int cell : board) {
+            if (cell == GameState.ARROW) {
+                arrows++;
+            }
+        }
+        return Math.min(1.0, arrows / (double) ENDGAME_PHASE_ARROWS);
+    }
+
+    private static int lerp(int early, int late, double phase) {
+        return (int) Math.round(early + (late - early) * phase);
     }
 
     private int reachableCountFrom(int[] board, int from) {

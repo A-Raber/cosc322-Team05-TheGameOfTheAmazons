@@ -14,6 +14,7 @@ import ubc.cosc322.engine.hybrid.HybridOpeningMctsAlphaBetaGenerator;
 import ubc.cosc322.engine.mcts.v1.MCTS;
 import ubc.cosc322.engine.mcts.v2.MCTSv2;
 import ubc.cosc322.model.GameState;
+import ubc.cosc322.model.Move;
 
 import ygraph.ai.smartfox.games.BaseGameGUI;
 import ygraph.ai.smartfox.games.GameClient;
@@ -158,6 +159,12 @@ public class COSC322Test extends GamePlayer {
 			ArrayList<Integer> queenCurrent = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_CURR);
 			ArrayList<Integer> queenNext = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.QUEEN_POS_NEXT); // Queen here can't be capitalized because the stupid API labeled both "QUEEN" actions differently
 			ArrayList<Integer> arrowPosition = (ArrayList<Integer>) msgDetails.get(AmazonsGameMessage.ARROW_POS);
+			if (!isValidServerMove(queenCurrent, queenNext, arrowPosition)) {
+				System.err.println("Ignoring invalid opponent move payload: " + queenCurrent + " -> " + queenNext + " arrow " + arrowPosition);
+				return true;
+			}
+			Move opponentMove = moveFromServerPositions(queenCurrent, queenNext, arrowPosition);
+			moveGenerator.onOpponentMoveObserved(currentGameState, opponentMove);
 			
 			System.out.println("Opponent: queen" + queenCurrent.toString() + " -> " + queenNext.toString() + ", arrow -> " + arrowPosition.toString());
 			currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
@@ -178,18 +185,31 @@ public class COSC322Test extends GamePlayer {
 			if (winnerName == null) winnerName = "(unknown)";
 			String solverName = moveGenerator.getClass().getSimpleName();
 			System.out.println("Winner: " + (winningColor == GameState.BLACK ? "BLACK" : "WHITE") + "(" + winnerName + ") solver: " + solverName);
+			moveGenerator.shutdown();
 			return;
 		}
 
 		ArrayList<Integer>[] move = moveGenerator.generateMove(currentGameState);
+		for (int attempt = 0; attempt < 2 && move != null && !isValidServerMove(move[0], move[1], move[2]); attempt++) {
+			System.err.println("Generated invalid move (retrying): " + move[0] + " -> " + move[1] + " arrow " + move[2]);
+			move = moveGenerator.generateMove(currentGameState);
+		}
 		if (move == null) {
 			int winningColor = (currentGameState.getSideToMove() == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
 			printResults(winningColor);
+			moveGenerator.shutdown();
+			return;
+		}
+		if (!isValidServerMove(move[0], move[1], move[2])) {
+			System.err.println("Generator returned invalid move; aborting turn to avoid board corruption: " + move[0] + " -> " + move[1] + " arrow " + move[2]);
+			moveGenerator.shutdown();
 			return;
 		}
 
 		System.out.println("Move: queen " + move[0] + " -> " + move[1] + ", arrow -> " + move[2]);
+		Move ownMove = moveFromServerPositions(move[0], move[1], move[2]);
 		currentGameState.applyMove(move[0], move[1], move[2]);
+		moveGenerator.onOwnMovePlayed(currentGameState, ownMove);
 		gamegui.updateGameState(move[0], move[1], move[2]);
 		gameClient.sendMoveMessage(move[0], move[1], move[2]);
 
@@ -197,6 +217,7 @@ public class COSC322Test extends GamePlayer {
 		if (!moveGenerator.hasAnyLegalMove(currentGameState, opponentSide)) {
 			int winningColor = (opponentSide == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
 			printResults(winningColor);
+			moveGenerator.shutdown();
 		}
 	}
 	private void printResults(int winningColor) {
@@ -233,6 +254,35 @@ public class COSC322Test extends GamePlayer {
 
 	public int getMyColor() {
 		return myColor;
+	}
+
+	private static Move moveFromServerPositions(ArrayList<Integer> from, ArrayList<Integer> to, ArrayList<Integer> arrow) {
+		return new Move(toFlatIndex(from), toFlatIndex(to), toFlatIndex(arrow));
+	}
+
+	private static int toFlatIndex(ArrayList<Integer> position) {
+		if (!isValidServerPosition(position)) {
+			throw new IllegalArgumentException("Invalid server position: " + position);
+		}
+		int row = position.get(0) - 1;
+		int col = position.get(1) - 1;
+		return row * GameState.BOARD_SIZE + col;
+	}
+
+	private static boolean isValidServerMove(ArrayList<Integer> from, ArrayList<Integer> to, ArrayList<Integer> arrow) {
+		return isValidServerPosition(from) && isValidServerPosition(to) && isValidServerPosition(arrow);
+	}
+
+	private static boolean isValidServerPosition(ArrayList<Integer> position) {
+		if (position == null || position.size() < 2) {
+			return false;
+		}
+		Integer row = position.get(0);
+		Integer col = position.get(1);
+		if (row == null || col == null) {
+			return false;
+		}
+		return row >= 1 && row <= GameState.BOARD_SIZE && col >= 1 && col <= GameState.BOARD_SIZE;
 	}
 
 	@Override
