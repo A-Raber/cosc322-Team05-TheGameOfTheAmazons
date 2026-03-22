@@ -44,6 +44,8 @@ public class MCTSv2 extends AbstractMoveGenerator {
     private static final int BLUNDER_GUARD_RESPONSE_CHECK_CAP = 72;
     private static final double FORMATION_WEIGHT_OPENING = 1.55;
     private static final double FORMATION_WEIGHT_MIDGAME = 0.90;
+    private static final double OPPONENT_BLOCK_WEIGHT_OPENING = 1.05;
+    private static final double OPPONENT_BLOCK_WEIGHT_MIDGAME = 0.60;
 
     private final Random random = new Random();
     private final PhaseAwareHeuristic heuristic = new PhaseAwareHeuristic();
@@ -709,7 +711,9 @@ public class MCTSv2 extends AbstractMoveGenerator {
     private List<ScoredMove> generateCandidateMoves(GameState state, int cap) {
         int[] board = state.getBoardRef();
         int sideToMove = state.getSideToMove();
+        int opponentSide = opposite(sideToMove);
         int currentPly = countArrows(board);
+        int opponentMobilityBaseline = estimateTotalMobility(board, opponentSide);
         PriorityQueue<ScoredMove> best = new PriorityQueue<>(Math.max(1, cap), Comparator.comparingDouble(m -> m.score));
 
         ArrayList<Integer> queens = queensBuffer();
@@ -732,9 +736,16 @@ public class MCTSv2 extends AbstractMoveGenerator {
                 int mobilityAfter = getReachableSquaresWithMoveInto(
                         board, destination, queenPos, destination, sideToMove, mobilityScratch).size();
 
-                int sampled = sampleArrows(arrowTargets, arrowSample);
+                int sampled = sampleArrows(board, sideToMove, queenPos, destination, arrowTargets, arrowSample);
                 for (int i = 0; i < sampled; i++) {
                     int arrow = arrowSample[i];
+                    int opponentMobilityAfter = estimateOpponentMobilityAfterMove(
+                        board,
+                        opponentSide,
+                        queenPos,
+                        destination,
+                        sideToMove,
+                        arrow);
                     Move move = new Move(queenPos, destination, arrow);
                     double score = quickMoveScore(
                             board,
@@ -745,6 +756,8 @@ public class MCTSv2 extends AbstractMoveGenerator {
                             mobilityBefore,
                             mobilityAfter,
                             arrowTargets.size(),
+                            opponentMobilityBaseline,
+                            opponentMobilityAfter,
                             currentPly);
                     offerCandidate(best, cap, new ScoredMove(move, score));
                 }
@@ -756,36 +769,41 @@ public class MCTSv2 extends AbstractMoveGenerator {
         return candidates;
     }
 
-    private int sampleArrows(ArrayList<Integer> arrowTargets, int[] out) {
+    private int sampleArrows(int[] board, int sideToMove, int from, int destination, ArrayList<Integer> arrowTargets, int[] out) {
         if (arrowTargets.isEmpty()) {
             return 0;
         }
 
-        int count = 0;
-        int first = arrowTargets.get(0);
-        out[count++] = first;
-
-        if (arrowTargets.size() > 1 && count < out.length) {
-            int mid = arrowTargets.get(arrowTargets.size() / 2);
-            if (mid != first) {
-                out[count++] = mid;
-            }
+        int take = Math.min(out.length, arrowTargets.size());
+        int[] bestArrow = new int[take];
+        double[] bestScore = new double[take];
+        for (int i = 0; i < take; i++) {
+            bestArrow[i] = -1;
+            bestScore[i] = Double.NEGATIVE_INFINITY;
         }
 
-        if (arrowTargets.size() > 2 && count < out.length) {
-            int rand = arrowTargets.get(random.nextInt(arrowTargets.size()));
-            boolean duplicate = false;
-            for (int i = 0; i < count; i++) {
-                if (out[i] == rand) {
-                    duplicate = true;
-                    break;
+        for (int arrow : arrowTargets) {
+            double score = arrowPlacementScore(board, sideToMove, from, destination, arrow);
+            for (int slot = 0; slot < take; slot++) {
+                if (score <= bestScore[slot]) {
+                    continue;
                 }
-            }
-            if (!duplicate) {
-                out[count++] = rand;
+                for (int shift = take - 1; shift > slot; shift--) {
+                    bestArrow[shift] = bestArrow[shift - 1];
+                    bestScore[shift] = bestScore[shift - 1];
+                }
+                bestArrow[slot] = arrow;
+                bestScore[slot] = score;
+                break;
             }
         }
 
+        int count = 0;
+        for (int i = 0; i < take; i++) {
+            if (bestArrow[i] >= 0) {
+                out[count++] = bestArrow[i];
+            }
+        }
         return count;
     }
 
@@ -798,24 +816,44 @@ public class MCTSv2 extends AbstractMoveGenerator {
             int mobilityBefore,
             int mobilityAfter,
             int arrowFanout,
+            int opponentMobilityBefore,
+            int opponentMobilityAfter,
             int ply) {
         int territoryGain = mobilityAfter - mobilityBefore;
+        int opponentMobilityDelta = opponentMobilityBefore - opponentMobilityAfter;
         int centerProgress = manhattanFromCenter(from) - manhattanFromCenter(destination);
         int forwardProgress = rowProgress(sideToMove, from, destination);
         double formation = localFormationAfterMove(board, sideToMove, from, destination);
+        int selfLibertiesAfterShot = countReachableWithVirtualMoveAndArrow(board, destination, from, destination, sideToMove,
+                arrow);
+        int arrowDistanceToSelf = chebyshevDistance(destination, arrow);
 
         double centerPenaltyDest = manhattanFromCenter(destination);
         double centerPenaltyArrow = manhattanFromCenter(arrow);
         double formationWeight = ply < OPENING_PLY_THRESHOLD ? FORMATION_WEIGHT_OPENING : FORMATION_WEIGHT_MIDGAME;
+        double opponentBlockWeight = ply < OPENING_PLY_THRESHOLD ? OPPONENT_BLOCK_WEIGHT_OPENING : OPPONENT_BLOCK_WEIGHT_MIDGAME;
         double base = 1.50 * mobilityAfter
                 + 0.42 * territoryGain
+                + opponentBlockWeight * opponentMobilityDelta
                 + 0.70 * centerProgress
                 + 0.48 * forwardProgress
                 + 0.15 * arrowFanout
                 - 0.18 * centerPenaltyDest
                 - 0.08 * centerPenaltyArrow
-            + formationWeight * formation
+                + formationWeight * formation
                 + random.nextDouble() * 0.01;
+
+        if (selfLibertiesAfterShot <= 4) {
+            base -= 2.6 * (5 - selfLibertiesAfterShot);
+        } else {
+            base += 0.12 * Math.min(10, selfLibertiesAfterShot - 4);
+        }
+
+        if (arrowDistanceToSelf <= 1) {
+            base -= 2.2;
+        } else if (arrowDistanceToSelf == 2) {
+            base -= 0.6;
+        }
 
         if (ply < OPENING_PLY_THRESHOLD) {
             base += openingMoveBonus(new Move(from, destination, arrow), sideToMove, ply);
@@ -826,6 +864,127 @@ public class MCTSv2 extends AbstractMoveGenerator {
         }
 
         return base;
+    }
+
+    private double arrowPlacementScore(int[] board, int sideToMove, int from, int destination, int arrow) {
+        int selfDist = chebyshevDistance(destination, arrow);
+        int nearestOpponentDist = nearestQueenDistance(board, opposite(sideToMove), arrow);
+        int nearestFriendlyDist = nearestQueenDistanceWithMove(board, sideToMove, from, destination, arrow);
+        int selfLibertiesAfterShot = countReachableWithVirtualMoveAndArrow(board, destination, from, destination, sideToMove,
+                arrow);
+
+        double score = 0.0;
+        if (selfDist <= 1) {
+            score -= 4.0;
+        } else if (selfDist == 2) {
+            score -= 1.5;
+        } else {
+            score += 0.35;
+        }
+
+        score += 1.4 * Math.max(0, 8 - nearestOpponentDist);
+        score -= 0.85 * Math.max(0, 3 - nearestFriendlyDist);
+        score += 0.18 * Math.min(14, selfLibertiesAfterShot);
+        return score;
+    }
+
+    private int estimateOpponentMobilityAfterMove(
+            int[] board,
+            int opponentSide,
+            int from,
+            int destination,
+            int movingSide,
+            int arrow) {
+        int mobility = 0;
+        for (int i = 0; i < GameState.BOARD_CELLS; i++) {
+            if (board[i] != opponentSide || i == arrow) {
+                continue;
+            }
+            mobility += countReachableWithVirtualMoveAndArrow(board, i, from, destination, movingSide, arrow);
+        }
+        return mobility;
+    }
+
+    private int estimateTotalMobility(int[] board, int side) {
+        int mobility = 0;
+        ArrayList<Integer> scratch = new ArrayList<>(32);
+        for (int i = 0; i < GameState.BOARD_CELLS; i++) {
+            if (board[i] != side) {
+                continue;
+            }
+            mobility += getReachableSquaresInto(board, i, scratch).size();
+        }
+        return mobility;
+    }
+
+    private int countReachableWithVirtualMoveAndArrow(
+            int[] board,
+            int pos,
+            int from,
+            int destination,
+            int movingSide,
+            int arrow) {
+        int count = 0;
+        for (int offset : DIRECTION_OFFSETS) {
+            int current = pos;
+            while (true) {
+                int next = current + offset;
+                if (!isInsideBoard(next) || crossesRowBoundary(current, next)) {
+                    break;
+                }
+
+                int cellValue = board[next];
+                if (next == from) {
+                    cellValue = GameState.EMPTY;
+                } else if (next == destination) {
+                    cellValue = movingSide;
+                } else if (next == arrow) {
+                    cellValue = GameState.ARROW;
+                }
+
+                if (cellValue != GameState.EMPTY) {
+                    break;
+                }
+
+                count++;
+                current = next;
+            }
+        }
+        return count;
+    }
+
+    private static int chebyshevDistance(int a, int b) {
+        int aRow = a / GameState.BOARD_SIZE;
+        int aCol = a % GameState.BOARD_SIZE;
+        int bRow = b / GameState.BOARD_SIZE;
+        int bCol = b % GameState.BOARD_SIZE;
+        return Math.max(Math.abs(aRow - bRow), Math.abs(aCol - bCol));
+    }
+
+    private int nearestQueenDistance(int[] board, int side, int fromPos) {
+        int min = Integer.MAX_VALUE;
+        for (int i = 0; i < GameState.BOARD_CELLS; i++) {
+            if (board[i] == side) {
+                min = Math.min(min, chebyshevDistance(fromPos, i));
+            }
+        }
+        return min == Integer.MAX_VALUE ? 9 : min;
+    }
+
+    private int nearestQueenDistanceWithMove(int[] board, int side, int from, int destination, int fromPos) {
+        int min = Integer.MAX_VALUE;
+        for (int i = 0; i < GameState.BOARD_CELLS; i++) {
+            int piece = board[i];
+            if (i == from) {
+                piece = GameState.EMPTY;
+            } else if (i == destination) {
+                piece = side;
+            }
+            if (piece == side && i != destination) {
+                min = Math.min(min, chebyshevDistance(fromPos, i));
+            }
+        }
+        return min == Integer.MAX_VALUE ? 9 : min;
     }
 
     private void offerCandidate(PriorityQueue<ScoredMove> pq, int cap, ScoredMove candidate) {
