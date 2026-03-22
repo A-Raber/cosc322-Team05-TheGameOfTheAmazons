@@ -9,8 +9,10 @@ public class RelationalTerritorialHeuristic {
     private static final int INF = 1_000_000;
     private static final int TERRITORY_BASE = 8;
     private static final int TERRITORY_RELATION_WEIGHT = 1;
+    private static final int MAX_RELATION_DELTA = 6;
+    private static final int C1_BONUS = 6; // Extra value for exclusively owned territory (opponent can't reach)
     private static final int MOBILITY_WEIGHT = 5;
-    private static final int TRAPPED_QUEEN_WEIGHT = 120;
+    private static final int TRAPPED_QUEEN_WEIGHT = 200;
     private static final int LOW_MOBILITY_WEIGHT = 18;
     private static final int SIDE_TO_MOVE_BONUS = 8;
 
@@ -52,9 +54,19 @@ public class RelationalTerritorialHeuristic {
             int myD = distMy[idx];
             int oppD = distOpp[idx];
             if (myD < oppD) {
-                score += TERRITORY_BASE + TERRITORY_RELATION_WEIGHT * (oppD - myD);
+                if (oppD == INF) {
+                    score += TERRITORY_BASE + C1_BONUS;
+                } else {
+                    int relation = Math.min(MAX_RELATION_DELTA, oppD - myD);
+                    score += TERRITORY_BASE + TERRITORY_RELATION_WEIGHT * relation;
+                }
             } else if (oppD < myD) {
-                score -= TERRITORY_BASE + TERRITORY_RELATION_WEIGHT * (myD - oppD);
+                if (myD == INF) {
+                    score -= TERRITORY_BASE + C1_BONUS;
+                } else {
+                    int relation = Math.min(MAX_RELATION_DELTA, myD - oppD);
+                    score -= TERRITORY_BASE + TERRITORY_RELATION_WEIGHT * relation;
+                }
             }
         }
 

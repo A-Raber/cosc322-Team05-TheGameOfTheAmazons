@@ -1,6 +1,7 @@
 package ubc.cosc322.model;
 
 import java.util.List;
+import java.util.Random;
 
 public class GameState {
     
@@ -11,10 +12,27 @@ public class GameState {
 	public static final int WHITE = 2;
 	public static final int ARROW = 3;
 
+	// Zobrist hash table: one random 64-bit value per (cell, pieceType) pair
+	private static final long[][] ZOBRIST_PIECE;
+	// XOR'd in when it is BLACK's turn, flipped on every toggleSideToMove
+	private static final long ZOBRIST_SIDE_BLACK;
+
+	static {
+		Random rng = new Random(0x9E3779B97F4A7C15L);
+		ZOBRIST_PIECE = new long[BOARD_CELLS][4];
+		for (int cell = 0; cell < BOARD_CELLS; cell++) {
+			for (int piece = 1; piece <= 3; piece++) {
+				ZOBRIST_PIECE[cell][piece] = rng.nextLong();
+			}
+		}
+		ZOBRIST_SIDE_BLACK = rng.nextLong();
+	}
+
 	private final int[] board;
 	private int sideToMove;
 	private String blackPlayer;
 	private String whitePlayer;
+	private long zobristHash;
 
 	public GameState() {
 		this.board = new int[BOARD_CELLS];
@@ -25,6 +43,7 @@ public class GameState {
 		GameState copy = new GameState();
 		System.arraycopy(this.board, 0, copy.board, 0, BOARD_CELLS);
 		copy.sideToMove = this.sideToMove;
+		copy.zobristHash = this.zobristHash;
 		return copy;
 	}
 
@@ -36,7 +55,7 @@ public class GameState {
 				board[writeIndex++] = serverBoard.get(base + col);
 			}
 		}
-
+		recomputeHash();
 	}
 
 	public void applyMove(List<Integer> queenPositionCurrent, List<Integer> queenPositionNext, List<Integer> arrowPosition) {
@@ -45,18 +64,25 @@ public class GameState {
 		int arrow = XYtoBoardPosition(arrowPosition);
 
 		int movingPiece = board[from];
+		zobristHash ^= ZOBRIST_PIECE[from][movingPiece];
+		zobristHash ^= ZOBRIST_PIECE[to][movingPiece];
+		zobristHash ^= ZOBRIST_PIECE[arrow][ARROW];
+		zobristHash ^= ZOBRIST_SIDE_BLACK;
 		board[from] = EMPTY;
 		board[to] = movingPiece;
 		board[arrow] = ARROW;
 		toggleSideToMove();
 	}
 
-	// Apply a Move object directly (using flat indices)
 	public void applyMove(Move move) {
 		int from = move.from;
 		int to = move.to;
 		int arrow = move.arrow;
 		int movingPiece = board[from];
+		zobristHash ^= ZOBRIST_PIECE[from][movingPiece];
+		zobristHash ^= ZOBRIST_PIECE[to][movingPiece];
+		zobristHash ^= ZOBRIST_PIECE[arrow][ARROW];
+		zobristHash ^= ZOBRIST_SIDE_BLACK;
 		board[from] = EMPTY;
 		board[to] = movingPiece;
 		board[arrow] = ARROW;
@@ -64,6 +90,10 @@ public class GameState {
 	}
 
 	public void undoMove(int from, int to, int arrow, int movingPiece) {
+		zobristHash ^= ZOBRIST_PIECE[arrow][ARROW];
+		zobristHash ^= ZOBRIST_PIECE[to][movingPiece];
+		zobristHash ^= ZOBRIST_PIECE[from][movingPiece];
+		zobristHash ^= ZOBRIST_SIDE_BLACK;
 		board[arrow] = EMPTY;
 		board[to] = EMPTY;
 		board[from] = movingPiece;
@@ -74,8 +104,11 @@ public class GameState {
 		return sideToMove;
 	}
 
-	public void setSideToMove(int sideToMove) {
-		this.sideToMove = sideToMove;
+	public void setSideToMove(int newSide) {
+		if (newSide != sideToMove) {
+			zobristHash ^= ZOBRIST_SIDE_BLACK;
+			sideToMove = newSide;
+		}
 	}
 
 	public int[] getBoard() {
@@ -118,20 +151,55 @@ public class GameState {
 
 	// utility methods for loading test states for benchmarking
 	public void setCell(int row, int col, int value) {
-		board[row * BOARD_SIZE + col] = value;
+		setCell(row * BOARD_SIZE + col, value);
 	}
 	public void setCell(int idx, int value) {
+		int old = board[idx];
+		if (old != EMPTY)  zobristHash ^= ZOBRIST_PIECE[idx][old];
 		board[idx] = value;
+		if (value != EMPTY) zobristHash ^= ZOBRIST_PIECE[idx][value];
 	}
 	public void clearBoard() {
 		for (int i = 0; i < BOARD_CELLS; i++) {
 			board[i] = EMPTY;
 		}
+		zobristHash = (sideToMove == BLACK) ? ZOBRIST_SIDE_BLACK : 0L;
 	}
 
 	private int XYtoBoardPosition(List<Integer> position) {
 		int row = position.get(0) - 1;
 		int col = position.get(1) - 1;
 		return row * BOARD_SIZE + col;
+	}
+
+	// Returns the moving piece so the caller can pass it to undoMove
+	public int applyMoveForSearch(int from, int to, int arrow) {
+		int movingPiece = board[from];
+		zobristHash ^= ZOBRIST_PIECE[from][movingPiece];
+		zobristHash ^= ZOBRIST_PIECE[to][movingPiece];
+		zobristHash ^= ZOBRIST_PIECE[arrow][ARROW];
+		zobristHash ^= ZOBRIST_SIDE_BLACK;
+		board[from] = EMPTY;
+		board[to] = movingPiece;
+		board[arrow] = ARROW;
+		toggleSideToMove();
+		return movingPiece;
+	}
+
+	public long getZobristHash() {
+		return zobristHash;
+	}
+
+	// Must be called after any direct board mutation that bypasses applyMove/applyMoveForSearch
+	public void recomputeHash() {
+		zobristHash = 0L;
+		for (int i = 0; i < BOARD_CELLS; i++) {
+			if (board[i] != EMPTY) {
+				zobristHash ^= ZOBRIST_PIECE[i][board[i]];
+			}
+		}
+		if (sideToMove == BLACK) {
+			zobristHash ^= ZOBRIST_SIDE_BLACK;
+		}
 	}
 }
