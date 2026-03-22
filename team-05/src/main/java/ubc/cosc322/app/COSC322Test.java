@@ -38,6 +38,7 @@ public class COSC322Test extends GamePlayer {
 	private final GameState currentGameState = new GameState();
 	private final MoveGenerator moveGenerator;
 	private int myColor = GameState.BLACK;
+	private boolean movePairOpen = false;
 
 	/**
 	 * The main method
@@ -167,6 +168,10 @@ public class COSC322Test extends GamePlayer {
 			moveGenerator.onOpponentMoveObserved(currentGameState, opponentMove);
 
 			int opponentColor = (myColor == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
+			if (!movePairOpen) {
+				System.out.println();
+				movePairOpen = true;
+			}
 			System.out.println(formatMoveLog("Opponent Move", opponentColor, queenCurrent, queenNext, arrowPosition));
 			currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
 			gamegui.updateGameState(queenCurrent, queenNext, arrowPosition);
@@ -208,6 +213,10 @@ public class COSC322Test extends GamePlayer {
 		}
 
 		System.out.println(formatMoveLog("My Move", myColor, move[0], move[1], move[2]));
+		if (movePairOpen) {
+			System.out.println();
+			movePairOpen = false;
+		}
 		Move ownMove = moveFromServerPositions(move[0], move[1], move[2]);
 		currentGameState.applyMove(move[0], move[1], move[2]);
 		moveGenerator.onOwnMovePlayed(currentGameState, ownMove);
