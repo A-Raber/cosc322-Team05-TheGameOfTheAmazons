@@ -15,6 +15,7 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
     private static final int MAX_PLY = 128;
 
     private final RelationalTerritorialHeuristic heuristic = new RelationalTerritorialHeuristic();
+    private final TranspositionTable tt = new TranspositionTable();
 
     private final MoveBuffer[] plyMoveBuffers = new MoveBuffer[MAX_PLY];
     private final int[] killerMoveA = new int[MAX_PLY];
@@ -41,6 +42,15 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
 
         if (rootMoves.size == 0) {
             return null;
+        }
+
+        // Only one legal move — no search needed
+        if (rootMoves.size == 1) {
+            return new ArrayList[] {
+                toServerPosition(rootMoves.from[0]),
+                toServerPosition(rootMoves.to[0]),
+                toServerPosition(rootMoves.arrow[0])
+            };
         }
 
         timer = new Timer();
@@ -73,7 +83,8 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
             int iterationBestScore = NEG_INF;
 
             try {
-                orderRootMoves(rootMoves, rootMoves.score, bestFrom, bestTo, bestArrow);
+                orderRootMoves(rootMoves, rootMoves.score, bestFrom, bestTo, bestArrow,
+                        tt.getBestMove(rootState.getZobristHash()));
 
                 int alpha = NEG_INF;
                 int beta = POS_INF;
@@ -107,6 +118,11 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
                 bestTo = iterationBestTo;
                 bestArrow = iterationBestArrow;
                 depth++;
+
+                // Forced win found — no need to search deeper
+                if (iterationBestScore > MATE_SCORE / 2) {
+                    break;
+                }
             } catch (SearchTimeout timeout) {
                 break;
             }
@@ -122,13 +138,25 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
     private int negamax(GameState state, int depth, int ply, int alpha, int beta) {
         checkTimeout();
 
+        long hash = state.getZobristHash();
+
+        int ttScore = tt.probe(hash, depth, alpha, beta);
+        int ttBestMove = tt.lastBestMove; // set as side-effect of probe()
+        if (ttScore != TranspositionTable.NO_HIT) {
+            return ttScore;
+        }
+
         int sideToMove = state.getSideToMove();
 
         if (depth <= 0) {
+            int score;
             if (!hasAnyLegalMove(state, sideToMove)) {
-                return -MATE_SCORE + ply;
+                score = -MATE_SCORE + ply;
+            } else {
+                score = heuristic.evaluate(state, sideToMove);
             }
-            return heuristic.evaluate(state, sideToMove);
+            tt.store(hash, 0, score, TranspositionTable.EXACT, 0);
+            return score;
         }
 
         MoveBuffer moves = plyMoveBuffers[Math.min(ply, MAX_PLY - 1)];
@@ -136,17 +164,22 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         generateMoves(state, sideToMove, moves);
 
         if (moves.size == 0) {
-            return -MATE_SCORE + ply;
+            int score = -MATE_SCORE + ply;
+            tt.store(hash, depth, score, TranspositionTable.EXACT, 0);
+            return score;
         }
 
-        orderMoves(ply, moves);
+        orderMoves(ply, moves, ttBestMove);
 
-        int bestScore = NEG_INF;
+        int bestScore     = NEG_INF;
+        int bestMoveForTT = 0;
+        byte ttFlag       = TranspositionTable.UPPER_BOUND;
+
         for (int i = 0; i < moves.size; i++) {
             selectBestScoredMove(moves, i);
 
-            int from = moves.from[i];
-            int to = moves.to[i];
+            int from  = moves.from[i];
+            int to    = moves.to[i];
             int arrow = moves.arrow[i];
 
             int movingPiece = doMove(state, from, to, arrow);
@@ -154,23 +187,31 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
             state.undoMove(from, to, arrow, movingPiece);
 
             if (score > bestScore) {
-                bestScore = score;
+                bestScore     = score;
+                bestMoveForTT = packMove(from, to, arrow);
             }
             if (score > alpha) {
-                alpha = score;
+                alpha  = score;
+                ttFlag = TranspositionTable.EXACT;
             }
             if (alpha >= beta) {
                 recordCutoffMove(ply, from, to, arrow, depth);
-                break;
+                tt.store(hash, depth, bestScore, TranspositionTable.LOWER_BOUND, bestMoveForTT);
+                return bestScore;
             }
         }
 
+        tt.store(hash, depth, bestScore, ttFlag, bestMoveForTT);
         return bestScore;
     }
 
-    private void orderRootMoves(MoveBuffer rootMoves, int[] scores, int bestFrom, int bestTo, int bestArrow) {
+    private void orderRootMoves(MoveBuffer rootMoves, int[] scores, int bestFrom, int bestTo, int bestArrow, int ttBestMove) {
         for (int i = 0; i < rootMoves.size; i++) {
-            int score = scores[i];
+            int score  = scores[i];
+            int packed = packMove(rootMoves.from[i], rootMoves.to[i], rootMoves.arrow[i]);
+            if (packed == ttBestMove) {
+                score += 2_000_000;
+            }
             if (rootMoves.from[i] == bestFrom && rootMoves.to[i] == bestTo && rootMoves.arrow[i] == bestArrow) {
                 score += 1_000_000;
             }
@@ -182,15 +223,18 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         }
     }
 
-    private void orderMoves(int ply, MoveBuffer moves) {
-        int killerA = killerMoveA[Math.min(ply, MAX_PLY - 1)];
-        int killerB = killerMoveB[Math.min(ply, MAX_PLY - 1)];
+    private void orderMoves(int ply, MoveBuffer moves, int ttBestMove) {
+        int boundedPly = Math.min(ply, MAX_PLY - 1);
+        int killerA    = killerMoveA[boundedPly];
+        int killerB    = killerMoveB[boundedPly];
 
         for (int i = 0; i < moves.size; i++) {
             int packed = packMove(moves.from[i], moves.to[i], moves.arrow[i]);
-            int score = history[moves.from[i]][moves.to[i]];
+            int score  = history[moves.from[i]][moves.to[i]];
 
-            if (packed == killerA) {
+            if (packed == ttBestMove) {
+                score += 2_000_000;
+            } else if (packed == killerA) {
                 score += 900_000;
             } else if (packed == killerB) {
                 score += 700_000;
@@ -217,13 +261,7 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
     }
 
     private int doMove(GameState state, int from, int to, int arrow) {
-        int[] board = state.getBoardRef();
-        int movingPiece = board[from];
-        board[from] = GameState.EMPTY;
-        board[to] = movingPiece;
-        board[arrow] = GameState.ARROW;
-        state.setSideToMove(opposite(state.getSideToMove()));
-        return movingPiece;
+        return state.applyMoveForSearch(from, to, arrow);
     }
 
     private void generateMoves(GameState state, int side, MoveBuffer out) {
@@ -300,10 +338,6 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
         return from | (to << 7) | (arrow << 14);
     }
 
-    private static int opposite(int side) {
-        return (side == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
-    }
-
     private static final class SearchTimeout extends RuntimeException {
         private static final long serialVersionUID = 1L;
         private static final SearchTimeout INSTANCE = new SearchTimeout();
@@ -377,6 +411,61 @@ public class AlphaBetaMoveGenerator extends AbstractMoveGenerator {
             int[] grown = new int[newLength];
             System.arraycopy(source, 0, grown, 0, source.length);
             return grown;
+        }
+    }
+
+    // Caches search results by Zobrist hash. Uses an always-replace collision policy
+    // so the table stays populated with the most recently searched positions.
+    private static final class TranspositionTable {
+
+        static final byte EXACT       = 0;
+        // Fail-high cutoff: true score is >= stored value
+        static final byte LOWER_BOUND = 1;
+        // All moves failed low: true score is <= stored value
+        static final byte UPPER_BOUND = 2;
+
+        static final int NO_HIT = Integer.MIN_VALUE;
+
+        private static final int SIZE = 1 << 20;
+        private static final int MASK = SIZE - 1;
+
+        // Set as a side-effect of probe() so negamax can read both the score
+        // and the best move in a single table index computation.
+        int lastBestMove = 0;
+
+        private final long[] keys      = new long[SIZE];
+        private final int[]  scores    = new int[SIZE];
+        private final int[]  depths    = new int[SIZE];
+        private final byte[] flags     = new byte[SIZE];
+        private final int[]  bestMoves = new int[SIZE];
+
+        void store(long hash, int depth, int score, byte flag, int bestMove) {
+            int idx        = (int) (hash & MASK);
+            keys[idx]      = hash;
+            scores[idx]    = score;
+            depths[idx]    = depth;
+            flags[idx]     = flag;
+            bestMoves[idx] = bestMove;
+        }
+
+        int probe(long hash, int depth, int alpha, int beta) {
+            int idx = (int) (hash & MASK);
+            if (keys[idx] != hash) { lastBestMove = 0; return NO_HIT; }
+            lastBestMove = bestMoves[idx]; // always extract for move ordering
+            if (depths[idx] < depth)    return NO_HIT;
+
+            int  score = scores[idx];
+            byte flag  = flags[idx];
+            if (flag == EXACT)                          return score;
+            if (flag == LOWER_BOUND && score >= beta)   return score;
+            if (flag == UPPER_BOUND && score <= alpha)  return score;
+            return NO_HIT;
+        }
+
+        // Used for move ordering at the root, where probe() is not called.
+        int getBestMove(long hash) {
+            int idx = (int) (hash & MASK);
+            return (keys[idx] == hash) ? bestMoves[idx] : 0;
         }
     }
 }
