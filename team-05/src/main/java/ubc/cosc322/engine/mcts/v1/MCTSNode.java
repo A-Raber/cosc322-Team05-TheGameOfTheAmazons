@@ -1,7 +1,10 @@
-package ubc.cosc322;
+package ubc.cosc322.engine.mcts.v1;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import ubc.cosc322.model.GameState;
+import ubc.cosc322.model.Move;
 
 public class MCTSNode {
     GameState state;
@@ -25,3 +28,4 @@ public class MCTSNode {
     }
 
 }
+

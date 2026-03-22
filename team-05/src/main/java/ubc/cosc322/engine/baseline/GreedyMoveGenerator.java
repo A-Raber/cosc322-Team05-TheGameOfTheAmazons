@@ -1,6 +1,9 @@
-package ubc.cosc322;
+package ubc.cosc322.engine.baseline;
 
 import java.util.ArrayList;
+
+import ubc.cosc322.engine.AbstractMoveGenerator;
+import ubc.cosc322.model.GameState;
 
 // A simple determinstic greedy move generator.
 // Mostly for the purpose of comparison with other methods
@@ -59,3 +62,4 @@ public class GreedyMoveGenerator extends AbstractMoveGenerator {
         };
     }
 }
+

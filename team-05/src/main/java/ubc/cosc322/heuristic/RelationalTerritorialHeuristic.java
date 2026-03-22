@@ -1,6 +1,8 @@
-package ubc.cosc322;
+package ubc.cosc322.heuristic;
 
 import java.util.Arrays;
+
+import ubc.cosc322.model.GameState;
 
 public class RelationalTerritorialHeuristic {
 
@@ -23,17 +25,22 @@ public class RelationalTerritorialHeuristic {
         GameState.BOARD_SIZE + 1
     };
 
-    private final int[] distMy = new int[GameState.BOARD_CELLS];
-    private final int[] distOpp = new int[GameState.BOARD_CELLS];
-    private final int[] queue = new int[GameState.BOARD_CELLS];
+    private final ThreadLocal<int[]> distMyLocal = ThreadLocal.withInitial(() -> new int[GameState.BOARD_CELLS]);
+    private final ThreadLocal<int[]> distOppLocal = ThreadLocal.withInitial(() -> new int[GameState.BOARD_CELLS]);
+    private final ThreadLocal<int[]> queueLocal = ThreadLocal.withInitial(() -> new int[GameState.BOARD_CELLS]);
+    private final ThreadLocal<int[]> queenStatsLocal = ThreadLocal.withInitial(() -> new int[3]);
 
     public int evaluate(GameState state, int perspectiveSide) {
         int[] board = state.getBoardRef();
         int opponentSide = opposite(perspectiveSide);
+        int[] distMy = distMyLocal.get();
+        int[] distOpp = distOppLocal.get();
+        int[] queue = queueLocal.get();
+        int[] queenStats = queenStatsLocal.get();
 
         // --- Two BFS passes for queen-distance maps (unavoidable) ---
-        computeQueenDistanceMap(board, perspectiveSide, distMy);
-        computeQueenDistanceMap(board, opponentSide, distOpp);
+        computeQueenDistanceMap(board, perspectiveSide, distMy, queue);
+        computeQueenDistanceMap(board, opponentSide, distOpp, queue);
 
         // --- Territory score from distance maps (single pass over board) ---
         int score = 0;
@@ -74,9 +81,6 @@ public class RelationalTerritorialHeuristic {
         return score;
     }
 
-    // Reusable 3-element array: [0]=totalMobility, [1]=trappedCount, [2]=lowMobilityPenalty
-    private final int[] queenStats = new int[3];
-
     /**
      * Single pass over all queens of {@code side}: for each queen, compute
      * ray-based reachable count (mobility), and derive trapped / low-mobility
@@ -109,7 +113,7 @@ public class RelationalTerritorialHeuristic {
         out[2] = lowMobPenalty;
     }
 
-    private void computeQueenDistanceMap(int[] board, int side, int[] dist) {
+    private void computeQueenDistanceMap(int[] board, int side, int[] dist, int[] queue) {
         Arrays.fill(dist, INF);
 
         int head = 0;

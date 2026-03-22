@@ -1,4 +1,4 @@
-package ubc.cosc322;
+package ubc.cosc322.model;
 
 public class Move {
     public final int from;
