@@ -165,8 +165,9 @@ public class COSC322Test extends GamePlayer {
 			}
 			Move opponentMove = moveFromServerPositions(queenCurrent, queenNext, arrowPosition);
 			moveGenerator.onOpponentMoveObserved(currentGameState, opponentMove);
-			
-			System.out.println("Opponent: queen" + queenCurrent.toString() + " -> " + queenNext.toString() + ", arrow -> " + arrowPosition.toString());
+
+			int opponentColor = (myColor == GameState.BLACK) ? GameState.WHITE : GameState.BLACK;
+			System.out.println(formatMoveLog("Opponent Move", opponentColor, queenCurrent, queenNext, arrowPosition));
 			currentGameState.applyMove(queenCurrent, queenNext, arrowPosition);
 			gamegui.updateGameState(queenCurrent, queenNext, arrowPosition);
 
@@ -206,7 +207,7 @@ public class COSC322Test extends GamePlayer {
 			return;
 		}
 
-		System.out.println("Move: queen " + move[0] + " -> " + move[1] + ", arrow -> " + move[2]);
+		System.out.println(formatMoveLog("My Move", myColor, move[0], move[1], move[2]));
 		Move ownMove = moveFromServerPositions(move[0], move[1], move[2]);
 		currentGameState.applyMove(move[0], move[1], move[2]);
 		moveGenerator.onOwnMovePlayed(currentGameState, ownMove);
@@ -254,6 +255,27 @@ public class COSC322Test extends GamePlayer {
 
 	public int getMyColor() {
 		return myColor;
+	}
+
+	private String formatMoveLog(String prefix, int color, ArrayList<Integer> from, ArrayList<Integer> to, ArrayList<Integer> arrow) {
+		String playerName = (color == GameState.BLACK) ? currentGameState.getBlackPlayer() : currentGameState.getWhitePlayer();
+		if (playerName == null) {
+			playerName = "(unknown)";
+		}
+		String colorName = (color == GameState.BLACK) ? "black" : "white";
+		return prefix + " (" + playerName + "): " + colorName + " queen"
+				+ formatSquare(from) + " -> " + formatSquare(to)
+				+ ", arrow -> " + formatSquare(arrow);
+	}
+
+	private static String formatSquare(ArrayList<Integer> position) {
+		if (!isValidServerPosition(position)) {
+			return String.valueOf(position);
+		}
+		int row = position.get(0);
+		int col = position.get(1);
+		char file = (char) ('A' + (col - 1));
+		return "[" + row + ", " + file + "]";
 	}
 
 	private static Move moveFromServerPositions(ArrayList<Integer> from, ArrayList<Integer> to, ArrayList<Integer> arrow) {
